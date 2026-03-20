@@ -13,7 +13,8 @@ let run file verbose =
   | None -> print_endline "No file provided!"
   | Some f -> 
         Printf.printf "Interpreting %s (verbose: %b)\n" f verbose;
-        Printf.printf "Contents: %s" (Interpreter.Files.read_file f)
+        Printf.printf "Contents: %s" (Interpreter.Files.read_file f);
+        Interpreter.Console.error "foo bar baz" 4 "message"
 
 let cmd =
   let doc = "A DreamBerd interpreter" in
