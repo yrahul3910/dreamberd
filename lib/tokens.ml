@@ -1,4 +1,4 @@
-type token =
+type token_type =
     | BANG of int   (** end of statement, contains priority *)
     | SEMICOLON  (** not operator *)
     | QUESTION_MARK  (** debug operator *)
@@ -84,4 +84,12 @@ type token =
     (** misc *)
     | UNDEFINED  (** works like in JS; dicts with unset keys return this *)
     (** eof *)
-    | EOF
+    | EOF;;
+
+
+type token = {
+    ttype: token_type;
+    lexeme: string;
+    line: int;
+    col: int;
+}

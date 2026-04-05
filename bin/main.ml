@@ -6,15 +6,15 @@ let file =
 
 let verbose =
   let doc = "Print internal interpreter state." in
-  Arg.(value & flag & info ["v"; "verbose"] ~doc)
+  Arg.(value & flag & info [ "v"; "verbose" ] ~doc)
 
 let run file verbose =
   match file with
   | None -> print_endline "No file provided!"
-  | Some f -> 
-        Printf.printf "Interpreting %s (verbose: %b)\n" f verbose;
-        Printf.printf "Contents: %s" (Interpreter.Files.read_file f);
-        Interpreter.Console.error "foo bar baz" 4 "message"
+  | Some f ->
+      Printf.printf "Interpreting %s (verbose: %b)\n" f verbose;
+      Printf.printf "Contents: %s" (Interpreter.Files.read_file f);
+      Interpreter.Console.error "foo bar baz" 4 "message"
 
 let cmd =
   let doc = "A DreamBerd interpreter" in
