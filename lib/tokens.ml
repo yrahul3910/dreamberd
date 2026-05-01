@@ -82,7 +82,7 @@ type token_type =
     | FLOAT of float
     | INFINITY  (** usable in lifetimes *)
     (** misc *)
-    | UNDEFINED  (** works like in JS; dicts with unset keys return this *)
+    | UNDEFINED  (** works like in JS; dicts with unset keys return this; also 1/0 *)
     (** eof *)
     | EOF;;
 
