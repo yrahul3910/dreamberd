@@ -4,7 +4,8 @@ let multi_char_tokens = [
   ("==",   Tokens.LOOSE_CHECK);
   (* TODO: need to handle `Tokens.MUCH_LOOSER_CHECK`*)
   ("=",    Tokens.ASSIGNMENT);
-  (* etc. *)
+  ("//",   Tokens.COMMENT);
+  ("/",    Tokens.FORWARD_SLASH);
 ]
 
 (* map from character to token for single-character tokens *)
@@ -26,7 +27,6 @@ let () = [
     ('+', Tokens.PLUS);
     ('-', Tokens.MINUS);
     ('*', Tokens.ASTERISK);
-    ('/', Tokens.FORWARD_SLASH);
     ('^', Tokens.CARET);
     (',', Tokens.COMMA);
     (':', Tokens.COLON);
