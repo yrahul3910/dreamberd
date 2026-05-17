@@ -21,7 +21,9 @@ let run file verbose tokens =
       Printf.printf "Contents: %s" source;
       if tokens then begin
         let toks = Interpreter.Scanner.scan_tokens source 0 [] [] in
-        List.iter (fun t -> print_endline (Interpreter.Tokens.token_type_to_string t)) toks
+        List.iter
+          (fun t -> print_endline (Interpreter.Tokens.token_type_to_string t))
+          toks
       end;
       Interpreter.Console.error "foo bar baz" 4 "message"
 
