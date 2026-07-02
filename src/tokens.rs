@@ -1,20 +1,15 @@
 //! Token definitions for the DreamBerd scanner.
-//!
-//! Ported from the OCaml `lib/tokens.ml`. Variant names follow Rust
-//! convention (UpperCamelCase) instead of the OCaml SCREAMING_CASE, but the
-//! `Display` impl reproduces the original `token_type_to_string` output so
-//! `--tokens` dumps stay comparable across the two implementations.
 
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     // whitespace
-    Space(u32), // count of spaces (currently always 1; see scanner notes)
+    Space(u32), // run length; leading indentation is coalesced, inner gaps stay 1
     Newline,
     // basics
-    Bang(u32), // end of statement, carries priority (count of `!`)
-    Semicolon, // the `not` operator
+    Bang(u32),    // end of statement, carries priority (count of `!` - count of `¡`)
+    Semicolon,    // the `not` operator
     QuestionMark, // debug operator
     // parens
     LeftParen,
@@ -25,8 +20,10 @@ pub enum TokenType {
     // arrays
     LeftBracket,
     RightBracket,
+    // member access
+    Dot, // `name.push(...)`; the parser decides what the access means
     // strings
-    Quote(String), // single or double
+    Quote(String), // quote type (single, double, any, etc.)
     // lifetimes
     LeftAngular,
     RightAngular,
@@ -120,6 +117,7 @@ impl fmt::Display for TokenType {
             RightBrace => write!(f, "RIGHT_BRACE"),
             LeftBracket => write!(f, "LEFT_BRACKET"),
             RightBracket => write!(f, "RIGHT_BRACKET"),
+            Dot => write!(f, "DOT"),
             Quote(q) => write!(f, "QUOTE({q})"),
             LeftAngular => write!(f, "LEFT_ANGULAR"),
             RightAngular => write!(f, "RIGHT_ANGULAR"),

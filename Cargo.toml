@@ -11,3 +11,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "dreamberd"
 path = "src/main.rs"
+
+[dependencies]
+clap = { version = "^4.6.0", default-features = false, features = ["derive", "help", "usage", "suggestions", "error-context", "std"] }
+miette = { version = "7.6.0", features = ["fancy"] }
+regex = "1.12.4"
+thiserror = "2.0.18"
+

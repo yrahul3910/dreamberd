@@ -1,0 +1,32 @@
+===== mastermind.gom =====
+// Be bold, Gulf of Mexico developers!
+
+unc le(left, right) => left - right!
+union station(choo) => choo--choo!
+
+      in deep() => {
+   delete 42!  // what's the meaning of life now? :3
+
+   const const lucky = 7!
+   const const quote = "Science, my lad, has been built upon many errors; but they are errors which it was good to fall into, for they led to the truth."!!!
+
+   const var password = [
+le(quote[station(4)], 0x20),
+quote[1],
+quote[le(55, 0x20)],
+   ]!
+
+   password[0.5] = quote[station(56)]!
+
+   const const exclamation = "Aight"!
+   (0..4).forEach((i) => {
+password.push(exclamation[i])!
+   });
+
+   if (lucky === 13) {
+password.push(quote[-1] + 0x20)!
+   }
+   print(password)!!
+
+   const const const lucky<-Infinity> = 13!!
+      }

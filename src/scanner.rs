@@ -1,40 +1,67 @@
 //! The DreamBerd scanner (lexer).
-//!
-//! Ported from `lib/scanner.ml`, with the previously-stubbed identifier /
-//! keyword branch filled in. The pipeline per position is unchanged from the
-//! OCaml original: try multi-char operators, then single-char tokens, then
-//! numbers / keywords / identifiers.
-//!
-//! Two deliberate departures from the OCaml version:
-//!   * `scan_tokens` returns a [`ScanResult`] carrying both the tokens and the
-//!     positions of scan errors. The OCaml threaded an `errs` list through the
-//!     recursion but discarded it at the base case.
-//!   * The source is scanned as a `Vec<char>`, so positions are char indices
-//!     (not bytes). This keeps the Unicode identifiers the spec allows from
-//!     tripping over UTF-8 byte boundaries.
+
+use miette::{Diagnostic, NamedSource, SourceSpan};
+use regex::Regex;
+use thiserror::Error;
 
 use crate::tokens::TokenType;
 
-/// Result of scanning a source string.
-#[derive(Debug, Default, PartialEq)]
-pub struct ScanResult {
-    pub tokens: Vec<TokenType>,
-    /// Char positions at which no token could be recognised.
-    pub errors: Vec<usize>,
+/// Width of a single indentation level, in spaces (see the Indents section of
+/// SPECIFICATION.md). Leading whitespace on a line must be a multiple of this.
+const INDENT_WIDTH: usize = 3;
+
+/// A single problem the scanner found in the source.
+#[derive(Debug, Error, Diagnostic)]
+#[error("{message}")]
+#[diagnostic(code(dreamberd::scanner))]
+pub struct LexerError {
+    /// The full source under scan, so the error renders in context.
+    #[source_code]
+    src: NamedSource<String>,
+
+    /// Byte span of the offending input within `src`.
+    #[label("{hint}")]
+    span: SourceSpan,
+
+    /// Short annotation rendered on the highlighted span.
+    hint: String,
+
+    /// Full description rendered as the error line.
+    message: String,
+
+    /// Optional suggestion for fixing the problem.
+    #[help]
+    advice: Option<String>,
 }
 
-/// Does `chars` contain `pat` (compared char-by-char) starting at `pos`?
-fn starts_with(chars: &[char], pos: usize, pat: &str) -> bool {
-    pat.chars()
-        .enumerate()
-        .all(|(i, pc)| chars.get(pos + i) == Some(&pc))
+/// All [`LexerError`]s from a single scan, grouped so they report together.
+#[derive(Debug, Error, Diagnostic)]
+#[error("scanning failed with {} error(s)", .errors.len())]
+pub struct ScanErrors {
+    #[related]
+    errors: Vec<LexerError>,
+}
+
+impl ScanErrors {
+    /// Group scan errors into a single reportable diagnostic.
+    pub fn new(errors: Vec<LexerError>) -> Self {
+        Self { errors }
+    }
+}
+
+/// Result of scanning a source string.
+#[derive(Debug, Default)]
+pub struct ScanResult {
+    pub tokens: Vec<TokenType>,
+    /// Diagnostics for any input the scanner could not tokenise.
+    pub errors: Vec<LexerError>,
 }
 
 /// Attempt to match one of the multi-character operators at `pos`, in order.
 ///
 /// The `=` family is listed longest-first so `====` wins over `==`, and `//`
 /// precedes `/` so comments aren't mistaken for division.
-fn try_match(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
+fn match_multi(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
     let table: [(&str, TokenType); 6] = [
         ("====", TokenType::MorePreciseCheck),
         ("===", TokenType::PreciseCheck),
@@ -45,12 +72,12 @@ fn try_match(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
     ];
     table
         .into_iter()
-        .find(|(pat, _)| starts_with(chars, pos, pat))
+        .find(|(pat, _)| pat[pos..].starts_with(chars))
         .map(|(pat, tok)| (pat.chars().count(), tok))
 }
 
 /// Single-character tokens. Letters, digits, `=` and `/` are intentionally
-/// absent — they are handled by [`try_match`] or [`parse_token`].
+/// absent — they are handled by [`match_multi`] or [`parse_token`].
 fn single_char(c: char) -> Option<TokenType> {
     use TokenType::*;
     Some(match c {
@@ -73,6 +100,7 @@ fn single_char(c: char) -> Option<TokenType> {
         '*' => Asterisk,
         '^' => Caret,
         ',' => Comma,
+        '.' => Dot,
         ':' => Colon,
         '\r' | '\n' => Newline,
         _ => return None,
@@ -83,9 +111,8 @@ fn single_char(c: char) -> Option<TokenType> {
 /// as an `f64`. Returns the parse result together with the next position, so
 /// the caller can always make progress even when the run doesn't parse.
 ///
-/// (Faithful to the OCaml `parse_digit`; the accepted char set is loose and
-/// will happily consume e.g. `1-2` into a single failing run — a refinement
-/// worth revisiting once numbers are actually evaluated.)
+/// TODO: the accepted char set is loose and will happily consume e.g. `1-2` into
+/// a single failing run
 fn parse_digit(chars: &[char], pos: usize) -> (Result<f64, ()>, usize) {
     let end = chars[pos..]
         .iter()
@@ -99,7 +126,7 @@ fn parse_digit(chars: &[char], pos: usize) -> (Result<f64, ()>, usize) {
 ///
 /// Note: `const` / `var` are absent on purpose. They only exist as the paired
 /// declaration forms (`const const`, `var var`, ...), which is a parser-level
-/// concern — the scanner emits them as identifiers for now.
+/// concern.
 fn keyword(word: &str) -> Option<TokenType> {
     use TokenType::*;
     Some(match word {
@@ -138,17 +165,11 @@ fn keyword(word: &str) -> Option<TokenType> {
 }
 
 /// Spellings of `function` that the spec shows explicitly.
-///
-/// The full rule is "any subsequence of the letters of `function`, in order"
-/// (so even `f` counts). That's ambiguous with ordinary identifiers — `f`,
-/// `in`, `on`, `no` are all subsequences — so the general rule is left to the
-/// parser, which has the context to disambiguate. See SPECIFICATION.md >
-/// Functions. Single-letter `f` is excluded here for the same reason.
 fn is_function_keyword(word: &str) -> bool {
-    matches!(
-        word,
-        "function" | "functio" | "functi" | "funct" | "func" | "fun" | "fn"
-    )
+    const MIN_FUNCTION_KW_LEN: usize = 2;
+    let re = Regex::new("f?u?n?c?t?i?o?n?").unwrap();
+
+    word.len() > MIN_FUNCTION_KW_LEN && re.is_match(word)
 }
 
 /// Scan a number, keyword, or identifier at `pos`, assuming [`try_match`] and
@@ -184,21 +205,70 @@ fn parse_token(chars: &[char], pos: usize) -> Result<(TokenType, usize), usize> 
     Err(pos + 1)
 }
 
+/// Byte span `(offset, length)` covering the char range `[start, end)`.
+///
+/// The scanner works in char indices (so Unicode identifiers don't desync it),
+/// but miette spans are byte offsets, so we sum the UTF-8 widths to convert.
+fn byte_span(chars: &[char], start: usize, end: usize) -> SourceSpan {
+    let offset: usize = chars[..start].iter().map(|c| c.len_utf8()).sum();
+    let len: usize = chars[start..end].iter().map(|c| c.len_utf8()).sum();
+    (offset, len).into()
+}
+
 /// Scan `source` into a token stream terminated by [`TokenType::Eof`].
-pub fn scan_tokens(source: &str) -> ScanResult {
+///
+/// `source_name` labels the source in any [`LexerError`]s produced (e.g. the
+/// file path), so diagnostics can point back at the right file.
+pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
     let chars: Vec<char> = source.chars().collect();
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
     let mut pos = 0;
 
+    // True at the start of the file and just after each newline, so the next
+    // space run can be treated as indentation rather than an inter-token gap.
+    let mut at_line_start = true;
+
     while pos < chars.len() {
+        // 0. leading indentation: coalesce the space run starting a line into a
+        //    single Space(n) and check it is a multiple of INDENT_WIDTH. The
+        //    relative +3-per-level / -3-outdent rules are left to the parser.
+        if at_line_start {
+            at_line_start = false;
+            if chars[pos] == ' ' {
+                let spaces = chars[pos..].iter().take_while(|&&c| c == ' ').count();
+                let end = pos + spaces;
+
+                // A run followed by a newline or EOF is a blank line, not an
+                // indent, so it is coalesced but not checked.
+                let blank_line = matches!(chars.get(end), None | Some(&('\n' | '\r')));
+                if !blank_line && spaces % INDENT_WIDTH != 0 {
+                    errors.push(LexerError {
+                        src: NamedSource::new(source_name, source.to_string()),
+                        span: byte_span(&chars, pos, pos + spaces),
+                        hint: format!("not a multiple of {INDENT_WIDTH}"),
+                        message: format!(
+            "indentation must be a multiple of {INDENT_WIDTH} spaces (found {spaces})"
+        ),
+                        advice: Some(format!(
+                            "Gulf of Mexico indents are {INDENT_WIDTH} spaces per level"
+                        )),
+                    });
+                }
+                tokens.push(TokenType::Space(u32::try_from(spaces).unwrap_or(u32::MAX)));
+                pos = end;
+                continue;
+            }
+        }
+
         // 1. multi-character operators
-        if let Some((len, tok)) = try_match(&chars, pos) {
+        if let Some((len, tok)) = match_multi(&chars, pos) {
             if tok == TokenType::Comment {
                 // comments run to end-of-line and are dropped, leaving a newline
                 match chars[pos..].iter().position(|&c| c == '\n') {
                     Some(offset) => {
                         tokens.push(TokenType::Newline);
+                        at_line_start = true;
                         pos += offset + 1;
                     }
                     None => break, // trailing comment; nothing left to scan
@@ -212,6 +282,9 @@ pub fn scan_tokens(source: &str) -> ScanResult {
 
         // 2. single-character tokens
         if let Some(tok) = single_char(chars[pos]) {
+            if tok == TokenType::Newline {
+                at_line_start = true;
+            }
             tokens.push(tok);
             pos += 1;
             continue;
@@ -224,7 +297,16 @@ pub fn scan_tokens(source: &str) -> ScanResult {
                 pos = next;
             }
             Err(next) => {
-                errors.push(pos);
+                errors.push(LexerError {
+                    src: NamedSource::new(source_name, source.to_string()),
+                    span: byte_span(&chars, pos, next),
+                    hint: "unexpected input".to_string(),
+                    message: format!(
+                        "unexpected input `{}`",
+                        chars[pos..next].iter().collect::<String>()
+                    ),
+                    advice: Some("remove or replace the highlighted input".to_string()),
+                });
                 pos = next;
             }
         }
