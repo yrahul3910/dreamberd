@@ -67,12 +67,15 @@ fn match_multi(chars: &str, pos: usize) -> Option<(usize, TokenType)> {
     }
 
     let table = [
+        ("const const const", TokenType::ConstConstConst),
+        ("const const", TokenType::ConstConst),
+        ("const var", TokenType::ConstVar),
+        ("var const", TokenType::VarConst),
         ("====", TokenType::MorePreciseCheck),
         ("===", TokenType::PreciseCheck),
         ("==", TokenType::LooseCheck),
         ("//", TokenType::Comment),
         ("=>", TokenType::Arrow),
-        ("..", TokenType::Range), // TODO: doesn't quite work yet
     ];
     table
         .into_iter()
@@ -112,30 +115,9 @@ fn single_char(c: char) -> Option<TokenType> {
     })
 }
 
-/// Read a run of digit-ish characters (`0-9`, `.`, `-`) at `pos` and parse it
-/// as an `f64`. Returns the parse result together with the next position, so
-/// the caller can always make progress even when the run doesn't parse.
-///
-/// TODO: This doesn't handle hex: 0x20, for example
-///
-/// TODO: the accepted char set is loose and will happily consume e.g. `1-2` into
-/// a single failing run
-fn parse_digit(chars: &[char], pos: usize) -> (Result<f64, ()>, usize) {
-    let end = chars[pos..]
-        .iter()
-        .take_while(|&&c| c.is_ascii_digit() || c == '.' || c == '-')
-        .count();
-    let s: String = chars[pos..pos + end].iter().collect();
-    (s.parse::<f64>().map_err(|_| ()), pos + end)
-}
-
 /// Reserved words that map to a single keyword token.
 fn keyword(word: &str) -> Option<TokenType> {
     Some(match word {
-        "const const const" => TokenType::ConstConstConst,
-        "const const" => TokenType::ConstConst,
-        "const var" => TokenType::ConstVar,
-        "var const " => TokenType::VarConst,
         "var var " => TokenType::VarVar,
         "true" => TokenType::True,
         "false" => TokenType::False,
@@ -179,6 +161,18 @@ fn is_function_keyword(word: &str) -> bool {
     word.len() > MIN_FUNCTION_KW_LEN && re.find(word).is_some_and(|m| m.len() == word.len())
 }
 
+/// Parse a number from a string that is either a hex value, oct value, or a valid number.
+fn parse_number(s: &str) -> Option<f64> {
+    if s.starts_with("0x") {
+        // TODO: We don't distinguish between int and float yet
+        i32::from_str_radix(&s[2..], 16).map(|i| f64::from(i)).ok()
+    } else if s.starts_with("0o") {
+        i32::from_str_radix(&s[2..], 8).map(|i| f64::from(i)).ok()
+    } else {
+        s.parse::<f64>().ok()
+    }
+}
+
 /// Scan a number, keyword, or identifier at `pos`, assuming [`try_match`] and
 /// [`single_char`] have already been tried. On failure returns the position to
 /// resume at (always strictly greater than `pos`, guaranteeing progress).
@@ -186,10 +180,23 @@ fn parse_token(chars: &[char], pos: usize) -> Result<(TokenType, usize), usize> 
     let c = chars[pos];
 
     if c.is_ascii_digit() {
-        let (parsed, next) = parse_digit(chars, pos);
-        return match parsed {
-            Ok(value) => Ok((TokenType::Float(value), next)),
-            Err(()) => Err(next), // skip the malformed numeric run
+        let end = chars[pos..]
+            .iter()
+            .take_while(|&&c| c.is_ascii_digit() || ['.', '-', 'x', 'o'].contains(&c))
+            .count();
+        let s: String = chars[pos..pos + end].iter().collect();
+
+        // Special case: ranges
+        if let Some(idx) = s.find("..")
+            && let Some(rstart) = parse_number(&s[..idx])
+            && let Some(rend) = parse_number(&s[idx + 2..])
+        {
+            return Ok((TokenType::Range(rstart as i64, rend as i64), pos + end));
+        }
+
+        return match parse_number(&s) {
+            Some(value) => Ok((TokenType::Float(value), pos + end)),
+            None => Err(pos + end), // skip the malformed numeric run
         };
     }
 
@@ -220,6 +227,79 @@ fn byte_span(chars: &[char], start: usize, end: usize) -> SourceSpan {
     let offset: usize = chars[..start].iter().map(|c| c.len_utf8()).sum();
     let len: usize = chars[start..end].iter().map(|c| c.len_utf8()).sum();
     (offset, len).into()
+}
+
+/// Given a stream of tokens, collapse those for which it makes sense.
+///
+/// For example, two `SPACE(1)` tokens are merged into one `SPACE(2)` token.
+fn collapse_tokens(tokens: &[TokenType]) -> Vec<TokenType> {
+    let mut i = 0;
+    let mut collapsed = Vec::new();
+
+    while i < tokens.len() {
+        match tokens[i] {
+            TokenType::Space(m) => {
+                let mut total_spaces = m;
+                let mut j = i + 1;
+
+                while j < tokens.len()
+                    && let TokenType::Space(n) = tokens[j]
+                {
+                    total_spaces += n;
+                    j += 1;
+                }
+                collapsed.push(TokenType::Space(total_spaces));
+
+                i = j;
+            }
+            TokenType::Bang(m) => {
+                let mut total_bangs = m;
+                let mut j = i + 1;
+
+                while j < tokens.len()
+                    && let TokenType::Bang(n) = tokens[j]
+                {
+                    total_bangs += n;
+                    j += 1;
+                }
+                collapsed.push(TokenType::Bang(total_bangs));
+
+                i = j;
+            }
+            TokenType::Quote(ref t) => {
+                let mut quote_type = t.clone();
+                let mut j = i + 1;
+
+                while j < tokens.len()
+                    && let TokenType::Quote(ref u) = tokens[j]
+                {
+                    quote_type.push_str(&u);
+                    j += 1;
+                }
+                collapsed.push(TokenType::Quote(quote_type));
+
+                i = j;
+            }
+            TokenType::Newline => {
+                collapsed.push(TokenType::Newline);
+                let mut j = i + 1;
+
+                while j < tokens.len()
+                    && let TokenType::Newline = tokens[j]
+                {
+                    j += 1;
+                }
+
+                i = j;
+            }
+            ref tok => {
+                collapsed.push(tok.clone());
+                i += 1;
+            }
+        }
+    }
+
+    collapsed
 }
 
 /// Scan `source` into a token stream terminated by [`TokenType::Eof`].
@@ -281,5 +361,9 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
     }
 
     tokens.push(TokenType::Eof);
-    ScanResult { tokens, errors }
+
+    ScanResult {
+        tokens: collapse_tokens(&tokens),
+        errors,
+    }
 }

@@ -32,7 +32,7 @@ fn main() -> miette::Result<()> {
     if args.debug {
         let result = scanner::scan_tokens(&source, "main.gom");
         for tok in &result.tokens {
-            println!("{tok}");
+            print!("{tok} ");
         }
         if !result.errors.is_empty() {
             return Err(scanner::ScanErrors::new(result.errors).into());
