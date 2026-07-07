@@ -1,5 +1,7 @@
 //! The DreamBerd scanner (lexer).
 
+use std::str::FromStr;
+
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use regex::Regex;
 use thiserror::Error;
@@ -162,14 +164,14 @@ fn is_function_keyword(word: &str) -> bool {
 }
 
 /// Parse a number from a string that is either a hex value, oct value, or a valid number.
-fn parse_number(s: &str) -> Option<f64> {
+fn parse_number<T: FromStr + From<i32>>(s: &str) -> Option<T> {
     if s.starts_with("0x") {
         // TODO: We don't distinguish between int and float yet
-        i32::from_str_radix(&s[2..], 16).map(|i| f64::from(i)).ok()
+        i32::from_str_radix(&s[2..], 16).map(|i| i.into()).ok()
     } else if s.starts_with("0o") {
-        i32::from_str_radix(&s[2..], 8).map(|i| f64::from(i)).ok()
+        i32::from_str_radix(&s[2..], 8).map(|i| i.into()).ok()
     } else {
-        s.parse::<f64>().ok()
+        s.parse::<T>().ok()
     }
 }
 
@@ -188,13 +190,13 @@ fn parse_token(chars: &[char], pos: usize) -> Result<(TokenType, usize), usize> 
 
         // Special case: ranges
         if let Some(idx) = s.find("..")
-            && let Some(rstart) = parse_number(&s[..idx])
-            && let Some(rend) = parse_number(&s[idx + 2..])
+            && let Some(rstart) = parse_number::<i32>(&s[..idx])
+            && let Some(rend) = parse_number::<i32>(&s[idx + 2..])
         {
             return Ok((TokenType::Range(rstart as i64, rend as i64), pos + end));
         }
 
-        return match parse_number(&s) {
+        return match parse_number::<f64>(&s) {
             Some(value) => Ok((TokenType::Float(value), pos + end)),
             None => Err(pos + end), // skip the malformed numeric run
         };
