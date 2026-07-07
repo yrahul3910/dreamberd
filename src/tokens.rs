@@ -100,6 +100,8 @@ pub enum TokenType {
     Undefined, // like JS; unset dict keys return this; also 1/0
     // eof
     Eof,
+    // Custom extensions
+    Range, // e.g., 0..4, the ".." is the Range token
 }
 
 impl fmt::Display for TokenType {
@@ -176,6 +178,7 @@ impl fmt::Display for TokenType {
             Infinity => write!(f, "INFINITY"),
             Undefined => write!(f, "UNDEFINED"),
             Eof => write!(f, "EOF"),
+            Range => write!(f, "RANGE"),
         }
     }
 }

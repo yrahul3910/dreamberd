@@ -6,10 +6,6 @@ use thiserror::Error;
 
 use crate::tokens::TokenType;
 
-/// Width of a single indentation level, in spaces (see the Indents section of
-/// SPECIFICATION.md). Leading whitespace on a line must be a multiple of this.
-const INDENT_WIDTH: usize = 3;
-
 /// A single problem the scanner found in the source.
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
@@ -52,6 +48,7 @@ impl ScanErrors {
 /// Result of scanning a source string.
 #[derive(Debug, Default)]
 pub struct ScanResult {
+    /// Tokens emitted by the lexer
     pub tokens: Vec<TokenType>,
     /// Diagnostics for any input the scanner could not tokenise.
     pub errors: Vec<LexerError>,
@@ -61,48 +58,56 @@ pub struct ScanResult {
 ///
 /// The `=` family is listed longest-first so `====` wins over `==`, and `//`
 /// precedes `/` so comments aren't mistaken for division.
-fn match_multi(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
-    let table: [(&str, TokenType); 6] = [
+fn match_multi(chars: &str, pos: usize) -> Option<(usize, TokenType)> {
+    // File delimiters can be 5 or more = (with no bound), so we check that separately
+    if chars[pos..].starts_with("=====") {
+        return chars[pos..]
+            .find(|c: char| c.is_whitespace())
+            .map(|p| (p, TokenType::FileDelim));
+    }
+
+    let table = [
         ("====", TokenType::MorePreciseCheck),
         ("===", TokenType::PreciseCheck),
         ("==", TokenType::LooseCheck),
-        ("=", TokenType::Assignment),
         ("//", TokenType::Comment),
-        ("/", TokenType::ForwardSlash),
+        ("=>", TokenType::Arrow),
+        ("..", TokenType::Range), // TODO: doesn't quite work yet
     ];
     table
         .into_iter()
-        .find(|(pat, _)| pat[pos..].starts_with(chars))
+        .find(|(pat, _)| chars[pos..].starts_with(pat))
         .map(|(pat, tok)| (pat.chars().count(), tok))
 }
 
-/// Single-character tokens. Letters, digits, `=` and `/` are intentionally
-/// absent — they are handled by [`match_multi`] or [`parse_token`].
+/// Single-character tokens. Letters and digits are intentionally
+/// absent: they are handled by [`parse_token`].
 fn single_char(c: char) -> Option<TokenType> {
-    use TokenType::*;
     Some(match c {
-        ' ' => Space(1),
-        '!' => Bang(1),
-        ';' => Semicolon,
-        '?' => QuestionMark,
-        '(' => LeftParen,
-        ')' => RightParen,
-        '{' => LeftBrace,
-        '}' => RightBrace,
-        '[' => LeftBracket,
-        ']' => RightBracket,
-        '<' => LeftAngular,
-        '>' => RightAngular,
-        '\'' => Quote("'".to_string()),
-        '"' => Quote("\"".to_string()),
-        '+' => Plus,
-        '-' => Minus,
-        '*' => Asterisk,
-        '^' => Caret,
-        ',' => Comma,
-        '.' => Dot,
-        ':' => Colon,
-        '\r' | '\n' => Newline,
+        '=' => TokenType::Assignment,
+        '/' => TokenType::ForwardSlash,
+        ' ' => TokenType::Space(1),
+        '!' => TokenType::Bang(1),
+        ';' => TokenType::Semicolon,
+        '?' => TokenType::QuestionMark,
+        '(' => TokenType::LeftParen,
+        ')' => TokenType::RightParen,
+        '{' => TokenType::LeftBrace,
+        '}' => TokenType::RightBrace,
+        '[' => TokenType::LeftBracket,
+        ']' => TokenType::RightBracket,
+        '<' => TokenType::LeftAngular,
+        '>' => TokenType::RightAngular,
+        '\'' => TokenType::Quote("'".to_string()),
+        '"' => TokenType::Quote("\"".to_string()),
+        '+' => TokenType::Plus,
+        '-' => TokenType::Minus,
+        '*' => TokenType::Asterisk,
+        '^' => TokenType::Caret,
+        ',' => TokenType::Comma,
+        '.' => TokenType::Dot,
+        ':' => TokenType::Colon,
+        '\r' | '\n' => TokenType::Newline,
         _ => return None,
     })
 }
@@ -110,6 +115,8 @@ fn single_char(c: char) -> Option<TokenType> {
 /// Read a run of digit-ish characters (`0-9`, `.`, `-`) at `pos` and parse it
 /// as an `f64`. Returns the parse result together with the next position, so
 /// the caller can always make progress even when the run doesn't parse.
+///
+/// TODO: This doesn't handle hex: 0x20, for example
 ///
 /// TODO: the accepted char set is loose and will happily consume e.g. `1-2` into
 /// a single failing run
@@ -123,43 +130,43 @@ fn parse_digit(chars: &[char], pos: usize) -> (Result<f64, ()>, usize) {
 }
 
 /// Reserved words that map to a single keyword token.
-///
-/// Note: `const` / `var` are absent on purpose. They only exist as the paired
-/// declaration forms (`const const`, `var var`, ...), which is a parser-level
-/// concern.
 fn keyword(word: &str) -> Option<TokenType> {
-    use TokenType::*;
     Some(match word {
-        "true" => True,
-        "false" => False,
-        "maybe" => Maybe,
-        "when" => When,
-        "use" => Use,
-        "return" => Return,
-        "previous" => Previous,
-        "next" => Next,
-        "current" => Current,
-        "import" => Import,
-        "export" => Export,
-        "to" => To,
+        "const const const" => TokenType::ConstConstConst,
+        "const const" => TokenType::ConstConst,
+        "const var" => TokenType::ConstVar,
+        "var const " => TokenType::VarConst,
+        "var var " => TokenType::VarVar,
+        "true" => TokenType::True,
+        "false" => TokenType::False,
+        "maybe" => TokenType::Maybe,
+        "when" => TokenType::When,
+        "use" => TokenType::Use,
+        "return" => TokenType::Return,
+        "previous" => TokenType::Previous,
+        "next" => TokenType::Next,
+        "current" => TokenType::Current,
+        "import" => TokenType::Import,
+        "export" => TokenType::Export,
+        "to" => TokenType::To,
         // `className` is the JS-compat alias for `class` (SPECIFICATION.md).
-        "class" | "className" => Class,
-        "new" => New,
-        "delete" => Delete,
-        "async" => Async,
-        "await" => Await,
-        "noop" => Noop,
-        "reverse" => Reverse,
-        "Infinity" => Infinity,
-        "undefined" => Undefined,
+        "class" | "className" => TokenType::Class,
+        "new" => TokenType::New,
+        "delete" => TokenType::Delete,
+        "async" => TokenType::Async,
+        "await" => TokenType::Await,
+        "noop" => TokenType::Noop,
+        "reverse" => TokenType::Reverse,
+        "Infinity" => TokenType::Infinity,
+        "undefined" => TokenType::Undefined,
         // Type names. Annotations are no-ops per the spec but still tokenized.
-        "Int" => IntT,
-        "String" => StringT,
-        "Char" => CharT,
-        "Digit" => DigitT,
-        "Int9" => Int9T,
-        "Int99" => Int99T,
-        "Regex" | "RegExp" | "RegularExpression" => RegexpT,
+        "Int" => TokenType::IntT,
+        "String" => TokenType::StringT,
+        "Char" => TokenType::CharT,
+        "Digit" => TokenType::DigitT,
+        "Int9" => TokenType::Int9T,
+        "Int99" => TokenType::Int99T,
+        "Regex" | "RegExp" | "RegularExpression" => TokenType::RegexpT,
         _ => return None,
     })
 }
@@ -169,7 +176,7 @@ fn is_function_keyword(word: &str) -> bool {
     const MIN_FUNCTION_KW_LEN: usize = 2;
     let re = Regex::new("f?u?n?c?t?i?o?n?").unwrap();
 
-    word.len() > MIN_FUNCTION_KW_LEN && re.is_match(word)
+    word.len() > MIN_FUNCTION_KW_LEN && re.find(word).is_some_and(|m| m.len() == word.len())
 }
 
 /// Scan a number, keyword, or identifier at `pos`, assuming [`try_match`] and
@@ -220,55 +227,18 @@ fn byte_span(chars: &[char], start: usize, end: usize) -> SourceSpan {
 /// `source_name` labels the source in any [`LexerError`]s produced (e.g. the
 /// file path), so diagnostics can point back at the right file.
 pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
-    let chars: Vec<char> = source.chars().collect();
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
     let mut pos = 0;
 
-    // True at the start of the file and just after each newline, so the next
-    // space run can be treated as indentation rather than an inter-token gap.
-    let mut at_line_start = true;
-
-    while pos < chars.len() {
-        // 0. leading indentation: coalesce the space run starting a line into a
-        //    single Space(n) and check it is a multiple of INDENT_WIDTH. The
-        //    relative +3-per-level / -3-outdent rules are left to the parser.
-        if at_line_start {
-            at_line_start = false;
-            if chars[pos] == ' ' {
-                let spaces = chars[pos..].iter().take_while(|&&c| c == ' ').count();
-                let end = pos + spaces;
-
-                // A run followed by a newline or EOF is a blank line, not an
-                // indent, so it is coalesced but not checked.
-                let blank_line = matches!(chars.get(end), None | Some(&('\n' | '\r')));
-                if !blank_line && spaces % INDENT_WIDTH != 0 {
-                    errors.push(LexerError {
-                        src: NamedSource::new(source_name, source.to_string()),
-                        span: byte_span(&chars, pos, pos + spaces),
-                        hint: format!("not a multiple of {INDENT_WIDTH}"),
-                        message: format!(
-            "indentation must be a multiple of {INDENT_WIDTH} spaces (found {spaces})"
-        ),
-                        advice: Some(format!(
-                            "Gulf of Mexico indents are {INDENT_WIDTH} spaces per level"
-                        )),
-                    });
-                }
-                tokens.push(TokenType::Space(u32::try_from(spaces).unwrap_or(u32::MAX)));
-                pos = end;
-                continue;
-            }
-        }
-
-        // 1. multi-character operators
-        if let Some((len, tok)) = match_multi(&chars, pos) {
+    while pos < source.len() {
+        // multi-character operators
+        if let Some((len, tok)) = match_multi(source, pos) {
             if tok == TokenType::Comment {
                 // comments run to end-of-line and are dropped, leaving a newline
-                match chars[pos..].iter().position(|&c| c == '\n') {
+                match source[pos..].find('\n') {
                     Some(offset) => {
                         tokens.push(TokenType::Newline);
-                        at_line_start = true;
                         pos += offset + 1;
                     }
                     None => break, // trailing comment; nothing left to scan
@@ -280,17 +250,15 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
             continue;
         }
 
-        // 2. single-character tokens
+        // single-character tokens
+        let chars: Vec<char> = source.chars().collect();
         if let Some(tok) = single_char(chars[pos]) {
-            if tok == TokenType::Newline {
-                at_line_start = true;
-            }
             tokens.push(tok);
             pos += 1;
             continue;
         }
 
-        // 3. numbers, keywords, identifiers
+        // numbers, keywords, identifiers
         match parse_token(&chars, pos) {
             Ok((tok, next)) => {
                 tokens.push(tok);
