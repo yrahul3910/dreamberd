@@ -8,7 +8,7 @@ pub enum TokenType {
     Space(u32), // run length; leading indentation is coalesced, inner gaps stay 1
     Newline,
     // basics
-    Bang(u32),    // end of statement, carries priority (count of `!` - count of `¡`)
+    Bang(i32),    // end of statement, carries priority (count of `!` minus count of `¡`; may be negative)
     Semicolon,    // the `not` operator
     QuestionMark, // debug operator
     // parens
@@ -38,6 +38,7 @@ pub enum TokenType {
     ForwardSlash,
     Caret,
     IncrementOp,
+    DecrementOp,
     // single-line comment
     Comment,
     // signals
@@ -93,7 +94,6 @@ pub enum TokenType {
     // literals
     Identifier(String),
     Str(String),
-    Integer(i64),
     Float(f64),
     Infinity, // usable in lifetimes
     // misc
@@ -101,6 +101,7 @@ pub enum TokenType {
     // eof
     Eof,
     // Custom extensions
+    Null,
     Range(i64, i64), // e.g., 0..4, the ".." is the Range token
 }
 
@@ -113,8 +114,9 @@ impl fmt::Display for TokenType {
             }
             TokenType::Newline => writeln!(f, "\n"),
             TokenType::Bang(n) => {
-                let s = "!".repeat(*n as usize);
-                f.write_str(&s)
+                // positive priority renders as `!`s, negative as `¡`s
+                let (mark, count) = if *n >= 0 { ("!", *n) } else { ("¡", -*n) };
+                f.write_str(&mark.repeat(count as usize))
             }
             TokenType::Semicolon => write!(f, ";"),
             TokenType::QuestionMark => write!(f, "?"),
@@ -137,6 +139,7 @@ impl fmt::Display for TokenType {
             TokenType::ForwardSlash => write!(f, "/"),
             TokenType::Caret => write!(f, "^"),
             TokenType::IncrementOp => write!(f, "++"),
+            TokenType::DecrementOp => write!(f, "--"),
             TokenType::Comment => write!(f, "COMMENT"),
             TokenType::When => write!(f, "when"),
             TokenType::Use => write!(f, "use"),
@@ -178,11 +181,11 @@ impl fmt::Display for TokenType {
             TokenType::Reverse => write!(f, "reverse"),
             TokenType::Identifier(s) => write!(f, "IDENTIFIER({s})"),
             TokenType::Str(s) => write!(f, "STRING({s})"),
-            TokenType::Integer(n) => write!(f, "{n}"),
             TokenType::Float(x) => write!(f, "{x}"),
             TokenType::Infinity => write!(f, "Infinity"),
             TokenType::Undefined => write!(f, "undefined"),
             TokenType::Eof => write!(f, "EOF"),
+            TokenType::Null => write!(f, "null"),
             TokenType::Range(s, e) => write!(f, "({s}..{e})"),
         }
     }
