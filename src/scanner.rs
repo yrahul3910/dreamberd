@@ -93,6 +93,7 @@ fn single_char(c: char) -> Option<TokenType> {
         '/' => TokenType::ForwardSlash,
         ' ' => TokenType::Space(1),
         '!' => TokenType::Bang(1),
+        '¡' => TokenType::Bang(-1),
         ';' => TokenType::Semicolon,
         '?' => TokenType::QuestionMark,
         '(' => TokenType::LeftParen,
