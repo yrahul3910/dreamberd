@@ -11,6 +11,19 @@ This file documents the deviations from `SPECIFICATION.md`. The goal is for the 
 
 The spec is at times vague, and at other times, self-contradicting. Some modifications make it a bit more precise. I took a *lot* of creative liberties here, and any resulting chaos is a feature and not a bug.
 
+### `maybe`
+
+The spec notes that booleans can be `true`, `false`, or `maybe`, and here we clarify some of the semantics of `maybe`.
+
+First, aside from assigning the value `maybe` to a variable, there is exactly one way to obtain the value `maybe`: using the *much less precision comparison*, `=`, between two booleans. Regardless of their values, for two booleans `a` and `b`, the *condition* `a = b` always returns `maybe`. As of now, the semantics of `=` for other types is unspecified.
+
+Second, `maybe` is evaluated uniquely compared to `true` and `false`: the interpreter simply uses a random number generator, equivalent to flipping a coin. If coerced to an integer, `maybe` resolves to 0.5. Further, `maybe` is treated specially: unlike `true` and `false`, it can be *stacked*, so:
+```
+   if (maybe maybe maybe)
+print(foo)!
+```
+prints `foo` one in eight times (in expectation). The above example uses -3 spaces for indentation.
+
 ### Name resolution
 
 Every possible string and number "exist" with priority 0 (as if they had been defined with no exclamation marks, which is not technically allowed). When a declaration declares something with at least priority +1, this overrides the "built-in" version.
@@ -87,6 +100,10 @@ delete 5!
 const const 5 = previous 5!
 print(previous 5)!  // throws an error, since `previous 5` resolves to <deleted>
 ```
+
+### `previous` and `next`
+
+The interaction of `previous` with `delete` was discussed above. We note here that `previous` (and `next`) do not stack, i.e., `previous previous 5` would be invalid syntax. However, you can stack `current` as much as you'd like.
 
 ### Strings
 
