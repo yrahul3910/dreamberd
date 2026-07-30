@@ -196,7 +196,7 @@ fn parse_token(chars: &[char], pos: usize) -> Result<(TokenType, usize), usize> 
     if c.is_ascii_digit() {
         let end = chars[pos..]
             .iter()
-            .take_while(|&&c| c.is_ascii_digit() || ['.', '-', 'x', 'o'].contains(&c))
+            .take_while(|&&c| c.is_ascii_hexdigit() || ['.', '-', 'x', 'o'].contains(&c))
             .count();
         let s: String = chars[pos..pos + end].iter().collect();
 

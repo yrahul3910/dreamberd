@@ -6,7 +6,9 @@ use dreamberd::{
 
 #[test]
 fn equality_operators_match_longest_first() {
-    assert_tokens!("==== === == =", vec![
+    assert_tokens!(
+        "==== === == =",
+        vec![
             MorePreciseCheck,
             Space(1),
             PreciseCheck,
@@ -21,8 +23,7 @@ fn equality_operators_match_longest_first() {
 
 #[test]
 fn five_or_more_equals_is_a_file_delimiter() {
-    assert_tokens!("=====\n=====", vec![FileDelim, Newline, FileDelim, Eof]
-    );
+    assert_tokens!("=====\n=====", vec![FileDelim, Newline, FileDelim, Eof]);
 }
 
 #[test]
@@ -64,7 +65,9 @@ fn too_short_or_out_of_order_letter_runs_are_identifiers() {
 
 #[test]
 fn comment_runs_to_end_of_line_leaving_a_newline() {
-    assert_tokens!("x // a comment\ny", vec![
+    assert_tokens!(
+        "x // a comment\ny",
+        vec![
             Identifier("x".into()),
             Space(1),
             Newline,
@@ -85,8 +88,7 @@ fn comment_at_eof_needs_no_newline() {
 
 #[test]
 fn comment_contents_are_never_tokenised() {
-    assert_tokens!("// ==== const delete\n42", vec![Newline, Float(42.0), Eof]
-    );
+    assert_tokens!("// ==== const delete\n42", vec![Newline, Float(42.0), Eof]);
 }
 
 #[test]
@@ -118,7 +120,9 @@ fn malformed_number_is_an_error_and_scanning_continues() {
 
 #[test]
 fn exclamation_marks_coalesce_into_one_priority() {
-    assert_tokens!("print(x)!!", vec![
+    assert_tokens!(
+        "print(x)!!",
+        vec![
             Identifier("print".into()),
             LeftParen,
             Identifier("x".into()),
@@ -132,7 +136,9 @@ fn exclamation_marks_coalesce_into_one_priority() {
 #[test]
 fn inverted_exclamation_marks_give_negative_priority() {
     // DEVIATIONS: "¡" inverted bangs subtract from the count.
-    assert_tokens!("print(x)¡¡", vec![
+    assert_tokens!(
+        "print(x)¡¡",
+        vec![
             Identifier("print".into()),
             LeftParen,
             Identifier("x".into()),
@@ -199,7 +205,9 @@ fn keywords_are_case_sensitive_except_explicit_aliases() {
 
 #[test]
 fn member_access_parses_as_dot() {
-    assert_tokens!("name.push", vec![
+    assert_tokens!(
+        "name.push",
+        vec![
             Identifier("name".into()),
             Dot,
             Identifier("push".into()),
@@ -210,14 +218,18 @@ fn member_access_parses_as_dot() {
 
 #[test]
 fn quote_kinds_are_distinct_tokens() {
-    assert_tokens!("'a'", vec![
+    assert_tokens!(
+        "'a'",
+        vec![
             Quote("'".into()),
             Identifier("a".into()),
             Quote("'".into()),
             Eof
         ]
     );
-    assert_tokens!("\"a\"", vec![
+    assert_tokens!(
+        "\"a\"",
+        vec![
             Quote("\"".into()),
             Identifier("a".into()),
             Quote("\"".into()),
@@ -246,7 +258,9 @@ fn six_space_indent_is_two_levels_and_fine() {
 #[test]
 fn spaces_between_tokens_are_not_indentation() {
     // A two-space gap mid-line is not a line-start indent, so no error.
-    assert_tokens!("a  b", vec![
+    assert_tokens!(
+        "a  b",
+        vec![
             Identifier("a".into()),
             Space(2),
             Identifier("b".into()),
