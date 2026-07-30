@@ -58,14 +58,19 @@ pub struct ScanResult {
 
 /// Attempt to match one of the multi-character operators at `pos`, in order.
 ///
+/// `pos` is a *char* index into `chars`; the whole scanner works in char
+/// indices so multi-byte input doesn't desync it, and miette's byte spans
+/// are produced by a separate conversion in [`byte_span`].
+///
 /// The `=` family is listed longest-first so `====` wins over `==`, and `//`
 /// precedes `/` so comments aren't mistaken for division.
-fn match_multi(chars: &str, pos: usize) -> Option<(usize, TokenType)> {
+fn match_multi(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
+    let rest = &chars[pos..];
+
     // File delimiters can be 5 or more = (with no bound), so we check that separately
-    if chars[pos..].starts_with("=====") {
-        return chars[pos..]
-            .find(|c: char| c.is_whitespace())
-            .map(|p| (p, TokenType::FileDelim));
+    if rest.starts_with(&['=', '=', '=', '=', '=']) {
+        let len = rest.iter().take_while(|&&c| c == '=').count();
+        return Some((len, TokenType::FileDelim));
     }
 
     let table = [
@@ -73,6 +78,7 @@ fn match_multi(chars: &str, pos: usize) -> Option<(usize, TokenType)> {
         ("const const", TokenType::ConstConst),
         ("const var", TokenType::ConstVar),
         ("var const", TokenType::VarConst),
+        ("var var", TokenType::VarVar),
         ("====", TokenType::MorePreciseCheck),
         ("===", TokenType::PreciseCheck),
         ("==", TokenType::LooseCheck),
@@ -81,7 +87,12 @@ fn match_multi(chars: &str, pos: usize) -> Option<(usize, TokenType)> {
     ];
     table
         .into_iter()
-        .find(|(pat, _)| chars[pos..].starts_with(pat))
+        .find(|(pat, _)| {
+            rest.iter()
+                .copied()
+                .take(pat.chars().count())
+                .eq(pat.chars())
+        })
         .map(|(pat, tok)| (pat.chars().count(), tok))
 }
 
@@ -161,7 +172,7 @@ fn is_function_keyword(word: &str) -> bool {
     const MIN_FUNCTION_KW_LEN: usize = 2;
     let re = Regex::new("f?u?n?c?t?i?o?n?").unwrap();
 
-    word.len() > MIN_FUNCTION_KW_LEN && re.find(word).is_some_and(|m| m.len() == word.len())
+    word.len() >= MIN_FUNCTION_KW_LEN && re.find(word).is_some_and(|m| m.len() == word.len())
 }
 
 /// Parse a number from a string that is either a hex value, oct value, or a valid number.
@@ -313,13 +324,15 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
     let mut pos = 0;
+    // The scanner works in char indices; multi-byte input must not desync it.
+    let chars: Vec<char> = source.chars().collect();
 
-    while pos < source.len() {
+    while pos < chars.len() {
         // multi-character operators
-        if let Some((len, tok)) = match_multi(source, pos) {
+        if let Some((len, tok)) = match_multi(&chars, pos) {
             if tok == TokenType::Comment {
                 // comments run to end-of-line and are dropped, leaving a newline
-                match source[pos..].find('\n') {
+                match chars[pos..].iter().position(|&c| c == '\n') {
                     Some(offset) => {
                         tokens.push(TokenType::Newline);
                         pos += offset + 1;
@@ -334,7 +347,6 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
         }
 
         // single-character tokens
-        let chars: Vec<char> = source.chars().collect();
         if let Some(tok) = single_char(chars[pos]) {
             tokens.push(tok);
             pos += 1;

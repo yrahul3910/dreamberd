@@ -22,5 +22,6 @@
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::cast_possible_wrap)]
 
+pub mod ast;
 pub mod scanner;
 pub mod tokens;
