@@ -56,15 +56,22 @@ pub struct ScanResult {
     pub errors: Vec<LexerError>,
 }
 
-/// Attempt to match one of the multi-character operators at `pos`, in order.
+/// Attempt to match one of the multi-character tokens at `pos`, in order.
 ///
 /// `pos` is a *char* index into `chars`; the whole scanner works in char
-/// indices so multi-byte input doesn't desync it, and miette's byte spans
-/// are produced by a separate conversion in [`byte_span`].
+/// indices so multi-byte input doesn't desync it.
 ///
-/// The `=` family is listed longest-first so `====` wins over `==`, and `//`
-/// precedes `/` so comments aren't mistaken for division.
-fn match_multi(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
+/// # Arguments
+///
+/// * `chars` - A slice of chars to process
+/// * `pos` - The position to start processing `chars` at
+///
+/// # Returns
+///
+/// A tuple (`len`, `tt`), where `len` is the length of the parsed token, and `tt` is the
+/// [`TokenType`] that was just parsed. If the token at the given position is not identified as a
+/// multi-char token, `None` is returned instead.
+fn match_multi_char(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
     let rest = &chars[pos..];
 
     // File delimiters can be 5 or more = (with no bound), so we check that separately
@@ -96,9 +103,15 @@ fn match_multi(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
         .map(|(pat, tok)| (pat.chars().count(), tok))
 }
 
-/// Single-character tokens. Letters and digits are intentionally
+/// Match single-character tokens. Letters and digits are intentionally
 /// absent: they are handled by [`parse_token`].
-fn single_char(c: char) -> Option<TokenType> {
+///
+/// # Arguments
+///
+/// * `c` - The char to match
+///
+/// A [`TokenType`] if one matches, otherwise `None`.
+fn match_single_char(c: char) -> Option<TokenType> {
     Some(match c {
         '=' => TokenType::Assignment,
         '/' => TokenType::ForwardSlash,
@@ -129,10 +142,17 @@ fn single_char(c: char) -> Option<TokenType> {
     })
 }
 
-/// Reserved words that map to a single keyword token.
-fn keyword(word: &str) -> Option<TokenType> {
+/// Match single-word keywords.
+///
+/// # Arguments
+///
+/// * `word` - A slice containing one word; this is not enforced
+///
+/// # Returns
+///
+/// A [`TokenType`], if a reserved keyword token matches; otherwise `None`.
+fn get_keyword_token(word: &str) -> Option<TokenType> {
     Some(match word {
-        "var var " => TokenType::VarVar,
         "true" => TokenType::True,
         "false" => TokenType::False,
         "maybe" => TokenType::Maybe,
@@ -167,7 +187,15 @@ fn keyword(word: &str) -> Option<TokenType> {
     })
 }
 
-/// Spellings of `function` that the spec shows explicitly.
+/// Match whether the word is a keyword defining a function.
+///
+/// # Arguments
+///
+/// * `word` - The slice to match
+///
+/// # Returns
+///
+/// `true` if this is a function keyword.
 fn is_function_keyword(word: &str) -> bool {
     const MIN_FUNCTION_KW_LEN: usize = 2;
     let re = Regex::new("f?u?n?c?t?i?o?n?").unwrap();
@@ -187,10 +215,24 @@ fn parse_number<T: FromStr + From<i32>>(s: &str) -> Option<T> {
     }
 }
 
-/// Scan a number, keyword, or identifier at `pos`, assuming [`try_match`] and
-/// [`single_char`] have already been tried. On failure returns the position to
-/// resume at (always strictly greater than `pos`, guaranteeing progress).
-fn parse_token(chars: &[char], pos: usize) -> Result<(TokenType, usize), usize> {
+/// Scan a number, keyword, or identifier at `pos`, assuming [`match_multi_char`] and
+/// [`match_single_char`] have already been tried. Anything else becomes an
+/// [`TokenType::Identifier`] too: per [Deviations], there are no invalid tokens.
+/// On failure (malformed numbers only) returns the position to resume at
+/// (always strictly greater than `pos`, guaranteeing progress).
+///
+/// [Deviations]: ../docs/DEVIATIONS.md
+///
+/// # Arguments
+///
+/// * `chars` - A slice of chars to parse
+/// * `pos` - A position to begin parsing `chars` from
+///
+/// # Returns
+///
+/// A tuple (`len`, `tt`), where `len` is the length of the parsed token, and `tt` is the
+/// [`TokenType`] that was just parsed.
+fn parse_token(chars: &[char], pos: usize) -> Result<(usize, TokenType), usize> {
     let c = chars[pos];
 
     if c.is_ascii_digit() {
@@ -205,12 +247,12 @@ fn parse_token(chars: &[char], pos: usize) -> Result<(TokenType, usize), usize> 
             && let Some(rstart) = parse_number::<i32>(&s[..idx])
             && let Some(rend) = parse_number::<i32>(&s[idx + 2..])
         {
-            return Ok((TokenType::Range(rstart as i64, rend as i64), pos + end));
+            return Ok((end, TokenType::Range(rstart as i64, rend as i64)));
         }
 
         return match parse_number::<f64>(&s) {
-            Some(value) => Ok((TokenType::Float(value), pos + end)),
-            None => Err(pos + end), // skip the malformed numeric run
+            Some(value) => Ok((end, TokenType::Float(value))),
+            None => Err(end), // skip the malformed numeric run
         };
     }
 
@@ -220,23 +262,37 @@ fn parse_token(chars: &[char], pos: usize) -> Result<(TokenType, usize), usize> 
             .take_while(|&&c| c.is_alphanumeric() || c == '_')
             .count();
         let word: String = chars[pos..pos + end].iter().collect();
-        let tok = if let Some(kw) = keyword(&word) {
+        let tok = if let Some(kw) = get_keyword_token(&word) {
             kw
         } else if is_function_keyword(&word) {
             TokenType::Function
         } else {
             TokenType::Identifier(word)
         };
-        return Ok((tok, pos + end));
+        return Ok((end, tok));
     }
 
-    Err(pos + 1)
+    // There is no such thing as an invalid token. Unknown input
+    // becomes an identifier; the parser decides whether it names a variable
+    // or forms part of a zero-quote string (undeclared identifiers are
+    // zero-quote strings per the spec).
+    Ok((1, TokenType::Identifier(c.to_string())))
 }
 
 /// Byte span `(offset, length)` covering the char range `[start, end)`.
 ///
 /// The scanner works in char indices (so Unicode identifiers don't desync it),
 /// but miette spans are byte offsets, so we sum the UTF-8 widths to convert.
+///
+/// # Arguments
+///
+/// * `chars` - A slice of chars
+/// * `start` - Inclusive start index
+/// * `end` - Exclusive end index
+///
+/// # Returns
+///
+/// A [`SourceSpan`] containing the offset and length in bytes
 fn byte_span(chars: &[char], start: usize, end: usize) -> SourceSpan {
     let offset: usize = chars[..start].iter().map(|c| c.len_utf8()).sum();
     let len: usize = chars[start..end].iter().map(|c| c.len_utf8()).sum();
@@ -246,6 +302,14 @@ fn byte_span(chars: &[char], start: usize, end: usize) -> SourceSpan {
 /// Given a stream of tokens, collapse those for which it makes sense.
 ///
 /// For example, two `SPACE(1)` tokens are merged into one `SPACE(2)` token.
+///
+/// # Arguments
+///
+/// * `tokens` - A slice of parsed tokens
+///
+/// # Returns
+///
+/// An owned [`Vec<TokenType>`].
 fn collapse_tokens(tokens: &[TokenType]) -> Vec<TokenType> {
     let mut i = 0;
     let mut collapsed = Vec::new();
@@ -320,6 +384,15 @@ fn collapse_tokens(tokens: &[TokenType]) -> Vec<TokenType> {
 ///
 /// `source_name` labels the source in any [`LexerError`]s produced (e.g. the
 /// file path), so diagnostics can point back at the right file.
+///
+/// # Arguments
+///
+/// * `source` - The source string to parse into tokens
+/// * `source_name` - The name of the source being parsed, such as a file name, used in errors
+///
+/// # Returns
+///
+/// A [`ScanResult`] containing the tokens and any errors encountered.
 pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
@@ -329,7 +402,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
 
     while pos < chars.len() {
         // multi-character operators
-        if let Some((len, tok)) = match_multi(&chars, pos) {
+        if let Some((len, tok)) = match_multi_char(&chars, pos) {
             if tok == TokenType::Comment {
                 // comments run to end-of-line and are dropped, leaving a newline
                 match chars[pos..].iter().position(|&c| c == '\n') {
@@ -347,7 +420,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
         }
 
         // single-character tokens
-        if let Some(tok) = single_char(chars[pos]) {
+        if let Some(tok) = match_single_char(chars[pos]) {
             tokens.push(tok);
             pos += 1;
             continue;
@@ -357,7 +430,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
         match parse_token(&chars, pos) {
             Ok((tok, next)) => {
                 tokens.push(tok);
-                pos = next;
+                pos += next;
             }
             Err(next) => {
                 errors.push(LexerError {
@@ -370,7 +443,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
                     ),
                     advice: Some("remove or replace the highlighted input".to_string()),
                 });
-                pos = next;
+                pos += next;
             }
         }
     }
