@@ -2,7 +2,7 @@
 name = "dreamberd"
 version = "0.1.0"
 edition = "2024"
-description = "A DreamBerd (GulfOfMexico) interpreter — Rust port"
+description = "A DreamBerd (Gulf of Mexico) interpreter"
 
 [lib]
 name = "dreamberd"
