@@ -428,7 +428,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
 
         // numbers, keywords, identifiers
         match parse_token(&chars, pos) {
-            Ok((tok, next)) => {
+            Ok((next, tok)) => {
                 tokens.push(tok);
                 pos += next;
             }
