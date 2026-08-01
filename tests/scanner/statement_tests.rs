@@ -52,11 +52,11 @@ fn exclamation_marks() {
             Eof,
         ]
     );
-    // `if` isn't a keyword; `;` is the `not` operator.
+    // `;` is the `not` operator.
     assert_tokens!(
         "if (;false) {",
         vec![
-            Identifier("if".into()),
+            If,
             Space(1),
             LeftParen,
             Semicolon,
@@ -80,7 +80,7 @@ fn declarations() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Luke".into()),
@@ -96,7 +96,7 @@ fn declarations() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Luke".into()),
@@ -124,7 +124,7 @@ fn declarations() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Luke".into()),
@@ -138,7 +138,7 @@ fn declarations() {
         vec![
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Lu".into()),
@@ -169,7 +169,7 @@ fn declarations() {
             Space(1),
             Identifier("pi".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(3.14),
             Bang(1),
@@ -187,7 +187,7 @@ fn naming_allows_any_unicode_or_number() {
             Space(1),
             Identifier("letter".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("'".into()),
             Identifier("A".into()),
@@ -204,7 +204,7 @@ fn naming_allows_any_unicode_or_number() {
             Space(1),
             Identifier("👍".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Identifier("True".into()),
             Bang(1),
@@ -213,6 +213,7 @@ fn naming_allows_any_unicode_or_number() {
     );
     // U+1F1E3 is a digit followed by two combining chars: the `1` scans as a
     // number, the combining chars become (zero-quote-string) identifiers.
+    // TODO: Maybe this should be different?
     assert_tokens!(
         "var var 1\u{fe0f}\u{20e3} = 1!",
         vec![
@@ -222,7 +223,7 @@ fn naming_allows_any_unicode_or_number() {
             Identifier("\u{fe0f}".into()),
             Identifier("\u{20e3}".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(1.0),
             Bang(1),
@@ -236,7 +237,7 @@ fn naming_allows_any_unicode_or_number() {
             Space(1),
             Float(5.0),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(4.0),
             Bang(1),
@@ -254,7 +255,7 @@ fn arrays() {
             Space(1),
             Identifier("scores".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             LeftBracket,
             Float(3.0),
@@ -292,7 +293,7 @@ fn arrays() {
             Float(0.5),
             RightBracket,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(4.0),
             Bang(1),
@@ -310,7 +311,7 @@ fn when_blocks() {
             Space(1),
             Identifier("health".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(10.0),
             Bang(1),
@@ -325,7 +326,7 @@ fn when_blocks() {
             LeftParen,
             Identifier("health".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(0.0),
             RightParen,
@@ -348,7 +349,7 @@ fn lifetimes() {
             Float(2.0),
             RightAngular,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Luke".into()),
@@ -368,7 +369,7 @@ fn lifetimes() {
             Identifier("s".into()),
             RightAngular,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Luke".into()),
@@ -387,7 +388,7 @@ fn lifetimes() {
             Infinity,
             RightAngular,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Luke".into()),
@@ -420,7 +421,7 @@ fn lifetimes() {
             Float(1.0),
             RightAngular,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Luke".into()),
@@ -440,7 +441,7 @@ fn booleans() {
             Space(1),
             Identifier("keys".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             LeftBrace,
             RightBrace,
@@ -471,7 +472,7 @@ fn booleans() {
             Identifier("key".into()),
             RightBracket,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             True,
             RightParen,
@@ -499,7 +500,7 @@ fn booleans() {
         "   if (keys[key] = undefined) {",
         vec![
             Space(3),
-            Identifier("if".into()),
+            If,
             Space(1),
             LeftParen,
             Identifier("keys".into()),
@@ -507,7 +508,7 @@ fn booleans() {
             Identifier("key".into()),
             RightBracket,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Undefined,
             RightParen,
@@ -579,7 +580,7 @@ fn arithmetic() {
             Space(1),
             Identifier("half".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(1.0),
             ForwardSlash,
@@ -685,6 +686,18 @@ fn equality() {
         ]
     );
     assert_tokens!(
+        "3.14==\"3.14\"!",
+        vec![
+            Float(3.14),
+            LooseCheck,
+            Quote("\"".into()),
+            Float(3.14),
+            Quote("\"".into()),
+            Bang(1),
+            Eof,
+        ]
+    );
+    assert_tokens!(
         "3.14 === \"3.14\"!",
         vec![
             Float(3.14),
@@ -727,7 +740,15 @@ fn equality() {
     );
     assert_tokens!(
         "3 = 3.14!",
-        vec![Float(3.0), Space(1), Assignment, Space(1), Float(3.14), Bang(1), Eof]
+        vec![
+            Float(3.0),
+            Space(1),
+            Equals,
+            Space(1),
+            Float(3.14),
+            Bang(1),
+            Eof
+        ]
     );
 }
 
@@ -853,13 +874,10 @@ fn functions() {
             Eof,
         ]
     );
-    // SPEC: `f` is a valid function keyword ("any letters from `function` in
-    // order"), but it currently lexes as an identifier; see the basic syntax
-    // tests. Pinning the deviation until that is fixed.
     assert_tokens!(
         "f inverse(a) => 1/a!",
         vec![
-            Identifier("f".into()),
+            Function,
             Space(1),
             Identifier("inverse".into()),
             LeftParen,
@@ -905,7 +923,7 @@ fn strings_with_any_number_of_quotes() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("'".into()),
             Identifier("Lu".into()),
@@ -921,7 +939,7 @@ fn strings_with_any_number_of_quotes() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("'''".into()),
             Identifier("Lu".into()),
@@ -931,7 +949,7 @@ fn strings_with_any_number_of_quotes() {
         ]
     );
     // Mixed quote types within a run coalesce too; matching them up (by
-    // reverse run) is the parser's job (DEVIATIONS).
+    // reverse run) is the parser's job.
     assert_tokens!(
         "const const name = \"'Lu'\"!",
         vec![
@@ -939,7 +957,7 @@ fn strings_with_any_number_of_quotes() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"'".into()),
             Identifier("Lu".into()),
@@ -955,7 +973,7 @@ fn strings_with_any_number_of_quotes() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"\"\"\"".into()),
             Identifier("Luke".into()),
@@ -972,7 +990,7 @@ fn strings_with_any_number_of_quotes() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Identifier("Luke".into()),
             Bang(1),
@@ -1100,7 +1118,7 @@ fn types() {
             Space(1),
             IntT,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(28.0),
             Bang(1),
@@ -1145,7 +1163,7 @@ fn types() {
             Space(1),
             Int9T,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(28.0),
             Bang(1),
@@ -1159,8 +1177,11 @@ fn types() {
 // rather than enumerating it.
 #[test]
 fn regular_expressions() {
-    assert_scans!(r#"const const email: RegExp<(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])> = "mymail@mail.com"!"#);
+    assert_scans!(
+        r#"const const email: RegExp<(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])> = "mymail@mail.com"!"#
+    );
     // No Regexp spelled differently is a keyword other than the documented ones.
+    // TODO: this should be fixed
     assert_tokens!(
         "const const r: RegExp = email!",
         vec![
@@ -1171,7 +1192,7 @@ fn regular_expressions() {
             Space(1),
             RegexpT,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Identifier("email".into()),
             Bang(1),
@@ -1189,7 +1210,7 @@ fn previous_next_and_current() {
             Space(1),
             Identifier("score".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(5.0),
             Bang(1),
@@ -1270,10 +1291,7 @@ fn previous_next_and_current() {
 
 #[test]
 fn file_structure() {
-    assert_tokens!(
-        "=====================",
-        vec![FileDelim, Eof]
-    );
+    assert_tokens!("=====================", vec![FileDelim, Eof]);
     // Named file: first run of 5+ equals opens it, trailing run is another.
     assert_tokens!(
         "======= add.gom =======",
@@ -1334,7 +1352,14 @@ fn exporting_and_importing() {
 fn classes() {
     assert_tokens!(
         "class Player {",
-        vec![Class, Space(1), Identifier("Player".into()), Space(1), LeftBrace, Eof]
+        vec![
+            Class,
+            Space(1),
+            Identifier("Player".into()),
+            Space(1),
+            LeftBrace,
+            Eof
+        ]
     );
     assert_tokens!(
         "const var player1 = new Player()!",
@@ -1343,7 +1368,7 @@ fn classes() {
             Space(1),
             Identifier("player1".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             New,
             Space(1),
@@ -1376,7 +1401,7 @@ fn classes() {
             Space(1),
             Identifier("player1".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Identifier("playerMaker".into()),
             Dot,
@@ -1390,7 +1415,14 @@ fn classes() {
     // className aliases class.
     assert_tokens!(
         "className Player {",
-        vec![Class, Space(1), Identifier("Player".into()), Space(1), LeftBrace, Eof]
+        vec![
+            Class,
+            Space(1),
+            Identifier("Player".into()),
+            Space(1),
+            LeftBrace,
+            Eof
+        ]
     );
 }
 
@@ -1418,7 +1450,7 @@ fn time() {
             RightParen,
             Space(1),
             Minus,
-            Assignment,
+            Equals,
             Space(1),
             Float(3_600_000.0),
             Bang(1),
@@ -1448,10 +1480,7 @@ fn delete() {
             Eof,
         ]
     );
-    assert_tokens!(
-        "delete class!",
-        vec![Delete, Space(1), Class, Bang(1), Eof]
-    );
+    assert_tokens!("delete class!", vec![Delete, Space(1), Class, Bang(1), Eof]);
     assert_tokens!(
         "delete delete!",
         vec![Delete, Space(1), Delete, Bang(1), Eof]
@@ -1479,7 +1508,7 @@ fn overloading_and_priority() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Luke".into()),
@@ -1495,7 +1524,7 @@ fn overloading_and_priority() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Lu".into()),
@@ -1511,7 +1540,7 @@ fn overloading_and_priority() {
             Space(1),
             Identifier("name".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Luke".into()),
@@ -1531,7 +1560,7 @@ fn semantic_naming() {
             Space(1),
             Identifier("sName".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Quote("\"".into()),
             Identifier("Lu".into()),
@@ -1547,7 +1576,7 @@ fn semantic_naming() {
             Space(1),
             Identifier("g_fScore".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(4.5),
             Bang(1),
@@ -1600,7 +1629,13 @@ fn asynchronous_functions() {
     assert_tokens!("   noop!", vec![Space(3), Noop, Bang(1), Eof]);
     assert_tokens!(
         "count()!",
-        vec![Identifier("count".into()), LeftParen, RightParen, Bang(1), Eof]
+        vec![
+            Identifier("count".into()),
+            LeftParen,
+            RightParen,
+            Bang(1),
+            Eof
+        ]
     );
 }
 
@@ -1613,7 +1648,7 @@ fn signals() {
             Space(1),
             Identifier("score".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Use,
             LeftParen,
@@ -1625,11 +1660,24 @@ fn signals() {
     );
     assert_tokens!(
         "score(9)!",
-        vec![Identifier("score".into()), LeftParen, Float(9.0), RightParen, Bang(1), Eof]
+        vec![
+            Identifier("score".into()),
+            LeftParen,
+            Float(9.0),
+            RightParen,
+            Bang(1),
+            Eof
+        ]
     );
     assert_tokens!(
         "score()?",
-        vec![Identifier("score".into()), LeftParen, RightParen, QuestionMark, Eof]
+        vec![
+            Identifier("score".into()),
+            LeftParen,
+            RightParen,
+            QuestionMark,
+            Eof
+        ]
     );
     assert_tokens!(
         "const var [getScore, setScore] = use(0)!",
@@ -1643,7 +1691,7 @@ fn signals() {
             Identifier("setScore".into()),
             RightBracket,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Use,
             LeftParen,
@@ -1675,7 +1723,7 @@ fn signals() {
             Identifier("setScore".into()),
             RightBracket,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Use,
             LeftParen,
@@ -1891,7 +1939,7 @@ fn main_gom_statements() {
             Float(0.5),
             RightBracket,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Identifier("quote".into()),
             LeftBracket,
@@ -1984,7 +2032,7 @@ fn main_gom_statements() {
             Infinity,
             RightAngular,
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(13.0),
             Bang(2),

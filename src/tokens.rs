@@ -50,7 +50,7 @@ pub enum TokenType {
     VarConst,        // can be re-assigned but not edited
     VarVar,          // can be edited and re-assigned
     ConstConstConst, // constant, immutable, affects all users globally forever
-    Equals, // `=`; assignment or much-looser comparison is the parser's call
+    Equals,          // `=`; assignment or much-looser comparison is the parser's call
     // comparison
     LooseCheck,       // "=="
     PreciseCheck,     // "==="
@@ -58,6 +58,9 @@ pub enum TokenType {
     // files
     FileDelim, // 5+ equal signs
     // functions
+    // TODO: Once the parser is done, this should be removed in favor of `Identifier` to accommodate
+    // zero-quote strings, and the parser can decide if, e.g., `unc` is a function, a local
+    // variable, or a zero-quote string.
     Function,
     Arrow, // function foo(a, b) => ...
     Return,

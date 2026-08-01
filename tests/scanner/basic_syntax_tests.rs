@@ -15,7 +15,7 @@ fn equality_operators_match_longest_first() {
             Space(1),
             LooseCheck,
             Space(1),
-            Assignment,
+            Equals,
             Eof,
         ]
     );
@@ -57,8 +57,8 @@ fn any_ordered_subsequence_of_function_at_least_3_chars_is_the_function_keyword(
 }
 
 #[test]
-fn too_short_or_out_of_order_letter_runs_are_identifiers() {
-    for spelling in ["f", "nf", "ions"] {
+fn out_of_order_letter_runs_are_identifiers() {
+    for spelling in ["nf", "ions"] {
         assert_tokens!(spelling, vec![Identifier(spelling.to_string()), Eof]);
     }
 }
@@ -175,6 +175,8 @@ fn boolean_and_maybe_literals() {
 #[test]
 fn keyword_table() {
     let cases: &[(&str, TokenType)] = &[
+        ("if", If),
+        ("else", Else),
         ("when", When),
         ("return", Return),
         ("previous", Previous),
@@ -193,6 +195,7 @@ fn keyword_table() {
         ("reverse", Reverse),
         ("Infinity", Infinity),
         ("undefined", Undefined),
+        ("null", Null),
         ("Int", IntT),
         ("String", StringT),
         ("Char", CharT),
@@ -310,7 +313,7 @@ fn unicode_source_does_not_panic_or_desync() {
         vec![
             Identifier("café".into()),
             Space(1),
-            Assignment,
+            Equals,
             Space(1),
             Float(1.0),
             Bang(1),
