@@ -115,7 +115,7 @@ fn match_multi_char(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
 /// A [`TokenType`] if one matches, otherwise `None`.
 fn match_single_char(c: char) -> Option<TokenType> {
     Some(match c {
-        '=' => TokenType::Assignment,
+        '=' => TokenType::Equals,
         '/' => TokenType::ForwardSlash,
         ' ' => TokenType::Space(1),
         '!' => TokenType::Bang(1),
@@ -158,6 +158,8 @@ fn get_keyword_token(word: &str) -> Option<TokenType> {
         "true" => TokenType::True,
         "false" => TokenType::False,
         "maybe" => TokenType::Maybe,
+        "if" => TokenType::If,
+        "else" => TokenType::Else,
         "when" => TokenType::When,
         "use" => TokenType::Use,
         "return" => TokenType::Return,
@@ -177,6 +179,7 @@ fn get_keyword_token(word: &str) -> Option<TokenType> {
         "reverse" => TokenType::Reverse,
         "Infinity" => TokenType::Infinity,
         "undefined" => TokenType::Undefined,
+        "null" => TokenType::Null,
         // Type names. Annotations are no-ops per the spec but still tokenized.
         "Int" => TokenType::IntT,
         "String" => TokenType::StringT,

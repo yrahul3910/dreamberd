@@ -40,6 +40,8 @@ pub enum TokenType {
     // single-line comment
     Comment,
     // signals
+    If,
+    Else,
     When,
     Use,
     // declarations
@@ -48,9 +50,8 @@ pub enum TokenType {
     VarConst,        // can be re-assigned but not edited
     VarVar,          // can be edited and re-assigned
     ConstConstConst, // constant, immutable, affects all users globally forever
-    Assignment,
+    Equals, // `=`; assignment or much-looser comparison is the parser's call
     // comparison
-    MuchLooserCheck,  // "="
     LooseCheck,       // "=="
     PreciseCheck,     // "==="
     MorePreciseCheck, // "===="
@@ -139,6 +140,8 @@ impl fmt::Display for TokenType {
             TokenType::ForwardSlash => write!(f, "/"),
             TokenType::Caret => write!(f, "^"),
             TokenType::Comment => write!(f, "COMMENT"),
+            TokenType::If => write!(f, "if"),
+            TokenType::Else => write!(f, "else"),
             TokenType::When => write!(f, "when"),
             TokenType::Use => write!(f, "use"),
             TokenType::ConstConst => write!(f, "const const"),
@@ -146,7 +149,7 @@ impl fmt::Display for TokenType {
             TokenType::VarConst => write!(f, "var const"),
             TokenType::VarVar => write!(f, "var var"),
             TokenType::ConstConstConst => write!(f, "const const const"),
-            TokenType::Assignment | TokenType::MuchLooserCheck => write!(f, "="),
+            TokenType::Equals => write!(f, "="),
             TokenType::LooseCheck => write!(f, "=="),
             TokenType::PreciseCheck => write!(f, "==="),
             TokenType::MorePreciseCheck => write!(f, "===="),

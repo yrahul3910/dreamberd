@@ -161,3 +161,4 @@ Time-based lifetimes (`<20s>`) are not implemented yet. The planned approach is 
 
 * Strings placed beside each other without any operator separating them are concatenated.
 * Ranges are supported, such as `(0..4)`. The ending of the range is always exclusive, and the bounds must both be integers.
+* `else` is supported after an `if` block (the spec has `if` only); `else if` falls out of that as `else` followed by a nested `if` block.
