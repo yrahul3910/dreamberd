@@ -128,6 +128,14 @@ const const x = "foo \" bar"!  // wrong: x = "foo \ bar" (without quotes)
 const const x = '"foo " bar"'!  // right: x = 'foo " bar' (without outer quotes)
 ```
 
+### Disambiguation: structured parses beat zero-quote strings
+
+Zero-quote strings are the *fallback* interpretation, not a first-class citizen competing with structured syntax. The parser attempts structured parses first; a bare name (or run of tokens) is treated as zero-quote string content only when no structured interpretation fits. An identifier we have never seen declared resolves to a zero-quote string, as long as it isn't explainable by (for example) a function declaration.
+
+Concretely, at statement boundaries the parser tries, in priority order: declarations, expressions, assignments, and only then falls back to reading the remaining tokens as string contents. In `unc le(left, right) => left - right!`, the declaration reading accounts for every token (name, parameter list, `=>`, body expression), so it wins over the string-soup reading in which `,`, `=>`, and `-` would all be swallowed as meaningless text.
+
+**Function keywords** follow from this: the scanner emits `Identifier` for every spelling (`function`, `func`, `fn`, `f`, `unc`, ...); the parser applies the subsequence test (`f?u?n?c?t?i?o?n?` must match the whole word, minimum length 1) at function-declaration position and nowhere else. This means a variable spelled like a function keyword is a valid (if confusing) name outside declaration position, and such a name also works as zero-quote string content.
+
 ### Lifetimes
 
 A declaration's lifetime is modelled as a **line-window of effect**. Name resolution at a given point only considers declarations whose window covers that point; the priority-then-recency rule above is then applied *within* the set of declarations live there.
