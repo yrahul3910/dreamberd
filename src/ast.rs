@@ -27,7 +27,7 @@ impl Display for Expression {
             Expression::Literal(tt) => write!(f, "{tt}"),
             Expression::Binary { left, op, right } => {
                 write!(f, "BinOp(left={{{left}}}, op={{")?;
-                for ref val in op {
+                for val in op {
                     write!(f, "{val}")?;
                 }
                 write!(f, "}}, right={{{right}}})")

@@ -42,6 +42,7 @@ pub struct ScanErrors {
 
 impl ScanErrors {
     /// Group scan errors into a single reportable diagnostic.
+    #[must_use]
     pub fn new(errors: Vec<LexerError>) -> Self {
         Self { errors }
     }
@@ -206,11 +207,15 @@ fn is_function_keyword(word: &str) -> bool {
 
 /// Parse a number from a string that is either a hex value, oct value, or a valid number.
 fn parse_number<T: FromStr + From<i32>>(s: &str) -> Option<T> {
-    if s.starts_with("0x") {
+    if let Some(stripped) = s.strip_prefix("0x") {
         // TODO: We don't distinguish between int and float yet
-        i32::from_str_radix(&s[2..], 16).map(|i| i.into()).ok()
-    } else if s.starts_with("0o") {
-        i32::from_str_radix(&s[2..], 8).map(|i| i.into()).ok()
+        i32::from_str_radix(stripped, 16)
+            .map(std::convert::Into::into)
+            .ok()
+    } else if let Some(stripped) = s.strip_prefix("0o") {
+        i32::from_str_radix(stripped, 8)
+            .map(std::convert::Into::into)
+            .ok()
     } else {
         s.parse::<T>().ok()
     }
@@ -262,16 +267,15 @@ fn parse_token(chars: &[char], pos: usize) -> (usize, TokenType) {
             }
         };
         let s: String = chars[pos..pos + end].iter().collect();
-        return match parse_number::<f64>(&s) {
-            Some(value) => (end, TokenType::Float(value)),
-            None => {
-                // Zero-quote string fallback
-                let s: String = chars[pos..]
-                    .iter()
-                    .take_while(|&&c| !c.is_whitespace() && c != '!' && c != '¡')
-                    .collect();
-                (s.len(), TokenType::Str(s))
-            }
+        return if let Some(value) = parse_number::<f64>(&s) {
+            (end, TokenType::Float(value))
+        } else {
+            // Zero-quote string fallback
+            let s: String = chars[pos..]
+                .iter()
+                .take_while(|&&c| !c.is_whitespace() && c != '!' && c != '¡')
+                .collect();
+            (s.len(), TokenType::Str(s))
         };
     }
 
@@ -360,7 +364,7 @@ fn collapse_tokens(tokens: &[TokenType]) -> Vec<TokenType> {
                 while j < tokens.len()
                     && let TokenType::Quote(ref u) = tokens[j]
                 {
-                    quote_type.push_str(&u);
+                    quote_type.push_str(u);
                     j += 1;
                 }
                 collapsed.push(TokenType::Quote(quote_type));
@@ -402,6 +406,7 @@ fn collapse_tokens(tokens: &[TokenType]) -> Vec<TokenType> {
 /// # Returns
 ///
 /// A [`ScanResult`] containing the tokens and any errors encountered.
+#[must_use]
 pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
@@ -430,6 +435,8 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
                     advice: Some("all indents must be 3 spaces long (or -3)".to_string()),
                 });
             }
+
+            #[allow(clippy::cast_possible_truncation)]
             tokens.push(TokenType::Space(run as u32));
             pos += run;
             // If the line had no content we are still waiting for its newline.

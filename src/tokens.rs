@@ -116,6 +116,8 @@ impl fmt::Display for TokenType {
             TokenType::Bang(n) => {
                 // positive priority renders as `!`s, negative as `¡`s
                 let (mark, count) = if *n >= 0 { ("!", *n) } else { ("¡", -*n) };
+
+                #[allow(clippy::cast_sign_loss)]
                 f.write_str(&mark.repeat(count as usize))
             }
             TokenType::Semicolon => write!(f, ";"),
@@ -148,8 +150,7 @@ impl fmt::Display for TokenType {
             TokenType::VarConst => write!(f, "var const"),
             TokenType::VarVar => write!(f, "var var"),
             TokenType::ConstConstConst => write!(f, "const const const"),
-            TokenType::Assignment => write!(f, "="),
-            TokenType::MuchLooserCheck => write!(f, "="),
+            TokenType::Assignment | TokenType::MuchLooserCheck => write!(f, "="),
             TokenType::LooseCheck => write!(f, "=="),
             TokenType::PreciseCheck => write!(f, "==="),
             TokenType::MorePreciseCheck => write!(f, "===="),

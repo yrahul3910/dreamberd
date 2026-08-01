@@ -24,7 +24,11 @@ macro_rules! assert_tokens {
             $src,
             result.errors
         );
-        assert_eq!(result.tokens, $expected, "\n  while scanning \u{1b}[32m{:?}\u{1b}[0m", $src);
+        assert_eq!(
+            result.tokens, $expected,
+            "\n  while scanning \u{1b}[32m{:?}\u{1b}[0m",
+            $src
+        );
     }};
 }
 
