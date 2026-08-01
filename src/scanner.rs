@@ -298,6 +298,16 @@ fn parse_token(chars: &[char], pos: usize) -> (usize, TokenType) {
     (1, TokenType::Identifier(c.to_string()))
 }
 
+/// Byte span `(offset, length)` covering the char range `[start, end)`.
+///
+/// The scanner works in char indices (so Unicode doesn't desync it), but
+/// miette spans are byte offsets, so we sum the UTF-8 widths to convert.
+fn byte_span(chars: &[char], start: usize, end: usize) -> SourceSpan {
+    let offset: usize = chars[..start].iter().map(|c| c.len_utf8()).sum();
+    let len: usize = chars[start..end].iter().map(|c| c.len_utf8()).sum();
+    (offset, len).into()
+}
+
 /// Given a stream of tokens, collapse those for which it makes sense.
 ///
 /// For example, two `SPACE(1)` tokens are merged into one `SPACE(2)` token.
@@ -387,22 +397,46 @@ fn collapse_tokens(tokens: &[TokenType]) -> Vec<TokenType> {
 /// # Arguments
 ///
 /// * `source` - The source string to parse into tokens
-/// * `source_name` - The name of the source being parsed, such as a file name,
-///   used in errors. Currently unused (there are no invalid tokens,
-///   per Deviations); reserved for future diagnostics like the indent rule.
+/// * `source_name` - The name of the source being parsed, such as a file name, used in errors
 ///
 /// # Returns
 ///
 /// A [`ScanResult`] containing the tokens and any errors encountered.
-#[allow(unused_variables)]
 pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
     let mut tokens = Vec::new();
-    let errors = Vec::new();
+    let mut errors = Vec::new();
     let mut pos = 0;
     // The scanner works in char indices; multi-byte input must not desync it.
     let chars: Vec<char> = source.chars().collect();
+    // True at the start of each line, for checking the leading indent
+    // (spec: "All indents must be 3 spaces long", i.e. a multiple of 3).
+    let mut at_line_start = true;
 
     while pos < chars.len() {
+        // Leading whitespace run: this is the line's indentation.
+        if at_line_start && chars[pos] == ' ' {
+            let run = chars[pos..].iter().take_while(|&&c| c == ' ').count();
+            // Blank lines and comment-only lines have no indent to check.
+            let line_has_content = chars
+                .get(pos + run)
+                .is_some_and(|&c| c != '\n' && c != '\r')
+                && chars.get(pos + run..pos + run + 2) != Some(['/', '/'].as_slice());
+            if line_has_content && run % 3 != 0 {
+                errors.push(LexerError {
+                    src: NamedSource::new(source_name, source.to_string()),
+                    span: byte_span(&chars, pos, pos + run),
+                    hint: format!("indent of {run} space(s)"),
+                    message: format!("indent of {run} space(s) is not a multiple of 3"),
+                    advice: Some("all indents must be 3 spaces long (or -3)".to_string()),
+                });
+            }
+            tokens.push(TokenType::Space(run as u32));
+            pos += run;
+            // If the line had no content we are still waiting for its newline.
+            at_line_start = !line_has_content;
+            continue;
+        }
+
         // multi-character operators
         if let Some((len, tok)) = match_multi_char(&chars, pos) {
             if tok == TokenType::Comment {
@@ -411,18 +445,23 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
                     Some(offset) => {
                         tokens.push(TokenType::Newline);
                         pos += offset + 1;
+                        at_line_start = true;
                     }
                     None => break, // trailing comment; nothing left to scan
                 }
             } else {
                 tokens.push(tok);
                 pos += len;
+                at_line_start = false;
             }
             continue;
         }
 
         // single-character tokens
         if let Some(tok) = match_single_char(chars[pos]) {
+            // Leading spaces are consumed by the indent check above, so a
+            // Space here is always mid-line; only a newline restarts a line.
+            at_line_start = matches!(tok, TokenType::Newline);
             tokens.push(tok);
             pos += 1;
             continue;
@@ -432,6 +471,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
         let (len, tok) = parse_token(&chars, pos);
         tokens.push(tok);
         pos += len;
+        at_line_start = false;
     }
 
     tokens.push(TokenType::Eof);
