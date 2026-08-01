@@ -37,8 +37,6 @@ pub enum TokenType {
     Asterisk,
     ForwardSlash,
     Caret,
-    IncrementOp,
-    DecrementOp,
     // single-line comment
     Comment,
     // signals
@@ -140,8 +138,6 @@ impl fmt::Display for TokenType {
             TokenType::Asterisk => write!(f, "*"),
             TokenType::ForwardSlash => write!(f, "/"),
             TokenType::Caret => write!(f, "^"),
-            TokenType::IncrementOp => write!(f, "++"),
-            TokenType::DecrementOp => write!(f, "--"),
             TokenType::Comment => write!(f, "COMMENT"),
             TokenType::When => write!(f, "when"),
             TokenType::Use => write!(f, "use"),

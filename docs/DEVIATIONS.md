@@ -6,6 +6,8 @@ This file documents the deviations from `SPECIFICATION.md`. The goal is for the 
 
 * Integers aren't implemented yet; all numeric values are floats. You can still type things as an `Int`, `Int9`, etc., but that is ignored (but type annotations are ignored per the spec anyway, so...)
 * Lifetimes aren't implemented yet. The intended model is documented under "Lifetimes" below; the time-based part (`<20s>`, `<Infinity>`) is the least developed.
+* DBX and rich text are not (and will not be) supported. Note that this sidesteps a scanner limitation: `//` inside a quoted string still lexes as a comment (the scanner doesn't track string state), which also affects ordinary strings containing `//`, e.g. `print("a // b")`.
+* Grapheme clusters are not handled: an identifier containing combining characters (e.g. the `1️⃣` variable name from the spec) splits into fragments (`Float(1)` plus single-char identifiers). In expression contexts the parser's adjacent-string concatenation rejoins them, so practical impact is limited to using such names as variables.
 
 ## Modified features
 

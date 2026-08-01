@@ -5,8 +5,7 @@ use crate::tokens::TokenType;
 /// A general expression in DreamBerd. This is essentially the AST.
 pub enum Expression {
     Unary {
-        /// Allowed: [`TokenType::Semicolon`], [`TokenType::Minus`],
-        /// [`TokenType::IncrementOp`], [`TokenType::DecrementOp`]
+        /// Allowed: [`TokenType::Semicolon`], [`TokenType::Minus`]
         op: TokenType,
         expr: Box<Expression>,
     },
