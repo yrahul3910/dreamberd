@@ -8,8 +8,8 @@ pub enum TokenType {
     Space(u32), // run length; leading indentation is coalesced, inner gaps stay 1
     Newline,
     // basics
-    Bang(i32),    // end of statement, carries priority (count of `!` minus count of `¡`; may be negative)
-    Semicolon,    // the `not` operator
+    Bang(i32), // end of statement, carries priority (count of `!` minus count of `¡`; may be negative)
+    Semicolon, // the `not` operator
     QuestionMark, // debug operator
     // parens
     LeftParen,
@@ -102,7 +102,7 @@ pub enum TokenType {
     Eof,
     // Custom extensions
     Null,
-    Range(i64, i64), // e.g., 0..4, the ".." is the Range token
+    Range,
 }
 
 impl fmt::Display for TokenType {
@@ -186,7 +186,7 @@ impl fmt::Display for TokenType {
             TokenType::Undefined => write!(f, "undefined"),
             TokenType::Eof => write!(f, "EOF"),
             TokenType::Null => write!(f, "null"),
-            TokenType::Range(s, e) => write!(f, "({s}..{e})"),
+            TokenType::Range => write!(f, "RANGE"),
         }
     }
 }

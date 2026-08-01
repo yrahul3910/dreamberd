@@ -92,6 +92,8 @@ fn comment_contents_are_never_tokenised() {
 }
 
 #[test]
+// The point is the literal source text "3.14", not the constant.
+#[allow(clippy::approx_constant)]
 fn integer_and_float_literals() {
     assert_tokens!("42", vec![Float(42.0), Eof]);
     assert_tokens!("3.14", vec![Float(3.14), Eof]);
@@ -106,16 +108,25 @@ fn hex_and_octal_literals() {
 #[test]
 fn range_literals() {
     // Custom extension: a..b (see GRAMMAR.md).
-    assert_tokens!("0..4", vec![Range(0, 4), Eof]);
-    assert_tokens!("0x1..0xF", vec![Range(1, 15), Eof]);
+    assert_tokens!("0..4", vec![Float(0.0), Range, Float(4.0), Eof]);
+    assert_tokens!("0x1..0xF", vec![Float(1.0), Range, Float(15.0), Eof]);
 }
 
 #[test]
-fn malformed_number_is_an_error_and_scanning_continues() {
-    let result = scan_tokens("1.2.3 y", "test.gom");
-    assert_eq!(result.errors.len(), 1);
-    // Recovery: the identifier after the bad number still tokenises.
-    assert!(result.tokens.contains(&Identifier("y".into())));
+fn double_dotted_number_is_float_dot_float() {
+    // There are no invalid tokens: `1.2.3` scans as if it were
+    // member access, like `arr.1`. The parser decides what it means.
+    assert_tokens!(
+        "1.2.3 y",
+        vec![
+            Float(1.2),
+            Dot,
+            Float(3.0),
+            Space(1),
+            Identifier("y".into()),
+            Eof
+        ]
+    );
 }
 
 #[test]

@@ -4,7 +4,7 @@
 unc le(left, right) => left - right!
 union station(choo) => choo--choo!
 
-      ion deep() => {
+      in deep() => {
    delete 42!  // what's the meaning of life now? :3
 
    const const lucky = 7!

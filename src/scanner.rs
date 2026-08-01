@@ -91,6 +91,7 @@ fn match_multi_char(chars: &[char], pos: usize) -> Option<(usize, TokenType)> {
         ("==", TokenType::LooseCheck),
         ("//", TokenType::Comment),
         ("=>", TokenType::Arrow),
+        ("..", TokenType::Range),
     ];
     table
         .into_iter()
@@ -218,8 +219,8 @@ fn parse_number<T: FromStr + From<i32>>(s: &str) -> Option<T> {
 /// Scan a number, keyword, or identifier at `pos`, assuming [`match_multi_char`] and
 /// [`match_single_char`] have already been tried. Anything else becomes an
 /// [`TokenType::Identifier`] too: per [Deviations], there are no invalid tokens.
-/// On failure (malformed numbers only) returns the position to resume at
-/// (always strictly greater than `pos`, guaranteeing progress).
+/// There is no failure mode (per [Deviations] there are no invalid tokens:
+/// anything unrecognised becomes an identifier or zero-quote string).
 ///
 /// [Deviations]: ../docs/DEVIATIONS.md
 ///
@@ -232,27 +233,45 @@ fn parse_number<T: FromStr + From<i32>>(s: &str) -> Option<T> {
 ///
 /// A tuple (`len`, `tt`), where `len` is the length of the parsed token, and `tt` is the
 /// [`TokenType`] that was just parsed.
-fn parse_token(chars: &[char], pos: usize) -> Result<(usize, TokenType), usize> {
+fn parse_token(chars: &[char], pos: usize) -> (usize, TokenType) {
     let c = chars[pos];
 
+    // Start by attempting to parse a float
     if c.is_ascii_digit() {
-        let end = chars[pos..]
-            .iter()
-            .take_while(|&&c| c.is_ascii_hexdigit() || ['.', '-', 'x', 'o'].contains(&c))
-            .count();
+        let rest = &chars[pos..];
+
+        let end = if rest.starts_with(&['0', 'x']) || rest.starts_with(&['0', 'o']) {
+            // hex / octal: prefix plus hexdigit run
+            2 + rest[2..]
+                .iter()
+                .take_while(|&&c| c.is_ascii_hexdigit())
+                .count()
+        } else {
+            let int_end = rest.iter().take_while(|&&c| c.is_ascii_digit()).count();
+
+            // Fraction: a single '.', but '..' is the `Range` token's business
+            if rest.get(int_end) == Some(&'.') && rest.get(int_end + 1) != Some(&'.') {
+                int_end
+                    + 1
+                    + rest[int_end + 1..]
+                        .iter()
+                        .take_while(|&&c| c.is_ascii_digit())
+                        .count()
+            } else {
+                int_end
+            }
+        };
         let s: String = chars[pos..pos + end].iter().collect();
-
-        // Special case: ranges
-        if let Some(idx) = s.find("..")
-            && let Some(rstart) = parse_number::<i32>(&s[..idx])
-            && let Some(rend) = parse_number::<i32>(&s[idx + 2..])
-        {
-            return Ok((end, TokenType::Range(rstart as i64, rend as i64)));
-        }
-
         return match parse_number::<f64>(&s) {
-            Some(value) => Ok((end, TokenType::Float(value))),
-            None => Err(end), // skip the malformed numeric run
+            Some(value) => (end, TokenType::Float(value)),
+            None => {
+                // Zero-quote string fallback
+                let s: String = chars[pos..]
+                    .iter()
+                    .take_while(|&&c| !c.is_whitespace() && c != '!' && c != '¡')
+                    .collect();
+                (s.len(), TokenType::Str(s))
+            }
         };
     }
 
@@ -269,34 +288,14 @@ fn parse_token(chars: &[char], pos: usize) -> Result<(usize, TokenType), usize> 
         } else {
             TokenType::Identifier(word)
         };
-        return Ok((end, tok));
+        return (end, tok);
     }
 
     // There is no such thing as an invalid token. Unknown input
     // becomes an identifier; the parser decides whether it names a variable
     // or forms part of a zero-quote string (undeclared identifiers are
     // zero-quote strings per the spec).
-    Ok((1, TokenType::Identifier(c.to_string())))
-}
-
-/// Byte span `(offset, length)` covering the char range `[start, end)`.
-///
-/// The scanner works in char indices (so Unicode identifiers don't desync it),
-/// but miette spans are byte offsets, so we sum the UTF-8 widths to convert.
-///
-/// # Arguments
-///
-/// * `chars` - A slice of chars
-/// * `start` - Inclusive start index
-/// * `end` - Exclusive end index
-///
-/// # Returns
-///
-/// A [`SourceSpan`] containing the offset and length in bytes
-fn byte_span(chars: &[char], start: usize, end: usize) -> SourceSpan {
-    let offset: usize = chars[..start].iter().map(|c| c.len_utf8()).sum();
-    let len: usize = chars[start..end].iter().map(|c| c.len_utf8()).sum();
-    (offset, len).into()
+    (1, TokenType::Identifier(c.to_string()))
 }
 
 /// Given a stream of tokens, collapse those for which it makes sense.
@@ -388,14 +387,17 @@ fn collapse_tokens(tokens: &[TokenType]) -> Vec<TokenType> {
 /// # Arguments
 ///
 /// * `source` - The source string to parse into tokens
-/// * `source_name` - The name of the source being parsed, such as a file name, used in errors
+/// * `source_name` - The name of the source being parsed, such as a file name,
+///   used in errors. Currently unused (there are no invalid tokens,
+///   per Deviations); reserved for future diagnostics like the indent rule.
 ///
 /// # Returns
 ///
 /// A [`ScanResult`] containing the tokens and any errors encountered.
+#[allow(unused_variables)]
 pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
     let mut tokens = Vec::new();
-    let mut errors = Vec::new();
+    let errors = Vec::new();
     let mut pos = 0;
     // The scanner works in char indices; multi-byte input must not desync it.
     let chars: Vec<char> = source.chars().collect();
@@ -427,25 +429,9 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
         }
 
         // numbers, keywords, identifiers
-        match parse_token(&chars, pos) {
-            Ok((next, tok)) => {
-                tokens.push(tok);
-                pos += next;
-            }
-            Err(next) => {
-                errors.push(LexerError {
-                    src: NamedSource::new(source_name, source.to_string()),
-                    span: byte_span(&chars, pos, next),
-                    hint: "unexpected input".to_string(),
-                    message: format!(
-                        "unexpected input `{}`",
-                        chars[pos..next].iter().collect::<String>()
-                    ),
-                    advice: Some("remove or replace the highlighted input".to_string()),
-                });
-                pos += next;
-            }
-        }
+        let (len, tok) = parse_token(&chars, pos);
+        tokens.push(tok);
+        pos += len;
     }
 
     tokens.push(TokenType::Eof);
