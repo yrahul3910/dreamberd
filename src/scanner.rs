@@ -304,14 +304,13 @@ fn parse_token(chars: &[char], pos: usize) -> (usize, TokenType) {
     (1, TokenType::Identifier(c.to_string()))
 }
 
-/// Byte span `(offset, length)` covering the char range `[start, end)`.
+/// UTF-8 byte length of the char range `[start, end)`.
 ///
 /// The scanner works in char indices (so Unicode doesn't desync it), but
-/// miette spans are byte offsets, so we sum the UTF-8 widths to convert.
-fn byte_span(chars: &[char], start: usize, end: usize) -> SourceSpan {
-    let offset: usize = chars[..start].iter().map(|c| c.len_utf8()).sum();
-    let len: usize = chars[start..end].iter().map(|c| c.len_utf8()).sum();
-    (offset, len).into()
+/// miette spans are byte offsets, so widths are summed to convert. The scan
+/// loop keeps a running byte offset so the total conversion cost stays O(n).
+fn byte_len(chars: &[char], start: usize, end: usize) -> usize {
+    chars[start..end].iter().map(|c| c.len_utf8()).sum()
 }
 
 /// Given a stream of tokens, collapse those for which it makes sense.
@@ -415,6 +414,8 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
     let mut pos = 0;
     // The scanner works in char indices; multi-byte input must not desync it.
     let chars: Vec<char> = source.chars().collect();
+    // Byte offset of `pos`, advanced in lockstep with it for miette spans.
+    let mut byte_pos = 0;
     // True at the start of each line, for checking the leading indent
     // (spec: "All indents must be 3 spaces long", i.e. a multiple of 3).
     let mut at_line_start = true;
@@ -431,7 +432,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
             if line_has_content && run % 3 != 0 {
                 errors.push(LexerError {
                     src: NamedSource::new(source_name, source.to_string()),
-                    span: byte_span(&chars, pos, pos + run),
+                    span: (byte_pos, run).into(),
                     hint: format!("indent of {run} space(s)"),
                     message: format!("indent of {run} space(s) is not a multiple of 3"),
                     advice: Some("all indents must be 3 spaces long (or -3)".to_string()),
@@ -441,6 +442,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
             #[allow(clippy::cast_possible_truncation)]
             tokens.push(TokenType::Space(run as u32));
             pos += run;
+            byte_pos += run;
             // If the line had no content we are still waiting for its newline.
             at_line_start = !line_has_content;
             continue;
@@ -453,6 +455,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
                 match chars[pos..].iter().position(|&c| c == '\n') {
                     Some(offset) => {
                         tokens.push(TokenType::Newline);
+                        byte_pos += byte_len(&chars, pos, pos + offset + 1);
                         pos += offset + 1;
                         at_line_start = true;
                     }
@@ -460,6 +463,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
                 }
             } else {
                 tokens.push(tok);
+                byte_pos += byte_len(&chars, pos, pos + len);
                 pos += len;
                 at_line_start = false;
             }
@@ -472,6 +476,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
             // Space here is always mid-line; only a newline restarts a line.
             at_line_start = matches!(tok, TokenType::Newline);
             tokens.push(tok);
+            byte_pos += chars[pos].len_utf8();
             pos += 1;
             continue;
         }
@@ -479,6 +484,7 @@ pub fn scan_tokens(source: &str, source_name: &str) -> ScanResult {
         // numbers, keywords, identifiers
         let (len, tok) = parse_token(&chars, pos);
         tokens.push(tok);
+        byte_pos += byte_len(&chars, pos, pos + len);
         pos += len;
         at_line_start = false;
     }
