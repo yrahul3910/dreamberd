@@ -202,10 +202,9 @@ fn get_keyword_token(word: &str) -> Option<TokenType> {
 ///
 /// `true` if this is a function keyword.
 fn is_function_keyword(word: &str) -> bool {
-    const MIN_FUNCTION_KW_LEN: usize = 1;
     static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new("f?u?n?c?t?i?o?n?").unwrap());
 
-    word.len() >= MIN_FUNCTION_KW_LEN && RE.find(word).is_some_and(|m| m.len() == word.len())
+    !word.is_empty() && RE.find(word).is_some_and(|m| m.len() == word.len())
 }
 
 /// Parse a number from a string that is either a hex value, oct value, or a valid number.
