@@ -9,10 +9,17 @@ This file documents the deviations from `SPECIFICATION.md`. The goal is for the 
 * DBX and rich text are not (and will not be) supported. Note that this sidesteps a scanner limitation: `//` inside a quoted string still lexes as a comment (the scanner doesn't track string state), which also affects ordinary strings containing `//`, e.g. `print("a // b")`.
 * Grapheme clusters are not handled: an identifier containing combining characters (e.g. the `1️⃣` variable name from the spec) splits into fragments (`Float(1)` plus single-char identifiers). In expression contexts the parser's adjacent-string concatenation rejoins them, so practical impact is limited to using such names as variables.
 * `Reg(ular)?[eE]x(p(ression)?)?` is not yet implemented.
+* Space-based precedence is not yet implemented: for now it is a fixed precedence, but it will be implemented using precedence climbing later.
 
 ## Modified features
 
 The spec is at times vague, and at other times, self-contradicting. Some modifications make it a bit more precise. I took a *lot* of creative liberties here, and any resulting chaos is a feature and not a bug.
+
+### Grammar
+
+This implementation adds some features that the spec doesn't explicitly provide but would normally be expected:
+
+* `;`, the not operator, works with any of the equality operators, so `;=`, `;==`, through `;====` are all valid.
 
 ### `maybe`
 
